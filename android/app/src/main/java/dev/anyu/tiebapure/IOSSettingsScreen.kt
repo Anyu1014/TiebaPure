@@ -37,6 +37,16 @@ import androidx.compose.ui.unit.*
             }
         } }
         item { SettingsFooter("选择后会立即应用；跟随系统会随手机的外观设置自动切换。") }
+        item { GroupHeader("底栏显示") }
+        item { IOSGroup {
+            SettingsToggle("底栏自动收缩", vm.bottomBarAutoCollapse) { vm.setBottomBarPreferences(autoCollapse = it) }
+            SettingsToggle("显示底栏文字", vm.bottomBarShowsLabels) { vm.setBottomBarPreferences(showsLabels = it) }
+            Column(Modifier.padding(16.dp)) {
+                Text("底栏收缩后位置", fontSize = 17.sp)
+                Spacer(Modifier.height(12.dp))
+                IOSSegmentedControl(BottomBarPosition.entries.map { it to it.title }, vm.bottomBarPosition, { vm.setBottomBarPreferences(position = it) }, Modifier.fillMaxWidth())
+            }
+        } }
         item { GroupHeader("内容") }
         item { IOSGroup {
             SettingsToggle("允许发帖", vm.newThreadsEnabled) { vm.setContentPreferences(newThreads = it) }
@@ -48,10 +58,11 @@ import androidx.compose.ui.unit.*
         } }
         item { SettingsFooter("发帖和回帖使用非官方实验接口，可能触发贴吧风控。关闭点赞后仍显示数量；设置和屏蔽规则仅保存在本机。") }
         if (vm.account != null) {
-            item { GroupHeader("签到") }
+            item { GroupHeader("自动化") }
             item { IOSGroup {
                 SettingsToggle("自动签到", automatic) { automatic = it; vm.store.prefs.edit().putBoolean("auto-sign", it).apply() }
                 IOSRow("立即签到", Icons.Default.Check) { vm.signAll() }
+                IOSRow("自动回复", TiebaIcons.Comment) { vm.navigate(Route("automation")) }
             } }
             item { SettingsFooter("每天第一次打开应用时，为关注的贴吧签到。") }
             item { GroupHeader("账号") }
@@ -101,8 +112,8 @@ import androidx.compose.ui.unit.*
         item { GroupHeader("本机内容") }
         item { IOSGroup {
             IOSRow("本机草稿", Icons.Default.Edit) { vm.navigate(Route("drafts", title = "本机草稿")) }
-            IOSRow("导出本地备份", Icons.Default.Share, export)
-            IOSRow("合并导入本地备份", Icons.Default.Add, restore)
+            IOSRow("导出本地备份", Icons.Default.Share, onClick = export)
+            IOSRow("合并导入本地备份", Icons.Default.Add, onClick = restore)
         } }
         item { SettingsFooter("备份包含历史、阅读页码、本地正文与屏蔽；不包含账号凭据、草稿、字体和离线媒体。") }
     }

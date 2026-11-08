@@ -51,6 +51,8 @@ final class MessageAPITests: XCTestCase {
         XCTAssertTrue(page.hasMore)
         XCTAssertEqual(page.currentPage, 2)
         XCTAssertEqual(page.items.count, 2)
+        XCTAssertEqual(page.unreadCount, 2)
+        XCTAssertEqual(page.otherUnreadCount, 0)
 
         let first = try XCTUnwrap(page.items.first)
         XCTAssertEqual(first.id, "reply-123-456-77-1710000000")
@@ -64,11 +66,13 @@ final class MessageAPITests: XCTestCase {
         XCTAssertEqual(first.threadTitle, "主题标题")
         XCTAssertEqual(first.forumName, "iPhone")
         XCTAssertFalse(first.isFloorReply)
+        XCTAssertEqual(first.isUnread, true)
         XCTAssertEqual(first.createdAt, Date(timeIntervalSince1970: 1_710_000_000))
 
         let floor = try XCTUnwrap(page.items.last)
         XCTAssertEqual(floor.id, "reply-124-999-88-1710003600")
         XCTAssertTrue(floor.isFloorReply)
+        XCTAssertNil(floor.isUnread)
         // A floor reply must jump to the parent post, not the subpost id.
         XCTAssertEqual(floor.postID, 456)
     }
@@ -86,6 +90,7 @@ final class MessageAPITests: XCTestCase {
 
         XCTAssertFalse(page.hasMore)
         XCTAssertEqual(page.currentPage, 1)
+        XCTAssertEqual(page.unreadCount, 1)
         XCTAssertEqual(page.items.count, 1)
 
         let item = try XCTUnwrap(page.items.first)
@@ -95,6 +100,24 @@ final class MessageAPITests: XCTestCase {
         XCTAssertEqual(item.threadID, 321)
         XCTAssertEqual(item.postID, 654)
         XCTAssertEqual(item.forumName, "显卡")
+    }
+
+    @MainActor
+    func testUnreadBadgeUsesServerStateAndIgnoresViewedFeedHead() throws {
+        let dto = try JSONDecoder().decode(MessageListResponseDTO.self, from: Self.replyResponseJSON)
+        let items = dto.list(for: .reply).compactMap { $0.messageItem(kind: .reply) }
+        var page = MessagesPage(items: items, currentPage: 1, hasMore: true, unreadCount: dto.unreadReplies)
+        XCTAssertTrue(MessageUnreadState.hasUnread(page, since: nil))
+        XCTAssertFalse(MessageUnreadState.hasUnread(page, since: items.first?.id))
+
+        page.unreadCount = nil
+        XCTAssertTrue(MessageUnreadState.hasUnread(page, since: items.last?.id))
+        page.items[0].isUnread = nil
+        XCTAssertFalse(MessageUnreadState.hasUnread(page, since: nil))
+        XCTAssertTrue(MessageUnreadState.hasUnread(page, since: nil, otherCount: 1))
+        XCTAssertTrue(MessageUnreadState.hasUnread(page, since: items.last?.id))
+        page.items[0].isUnread = false
+        XCTAssertFalse(MessageUnreadState.hasUnread(page, since: items.last?.id))
     }
 
     func testMessagesMapsExpiredSessionBusinessCode() async throws {
@@ -434,7 +457,8 @@ final class MessageAPITests: XCTestCase {
           "quote_pid": "0"
         }
       ],
-      "page": {"current_page": "1", "has_more": "0", "has_prev": "0"}
+      "page": {"current_page": "1", "has_more": "0", "has_prev": "0"},
+      "message": {"replyme": 0, "atme": 1}
     }
     """.utf8)
 }

@@ -90,10 +90,10 @@ enum ThreadMapper {
     }
 
     private static func likeCount(from proto: Tieba_ThreadInfo) -> Int {
-        if proto.agree.agreeNum != 0 {
-            return Int(proto.agree.agreeNum)
+        if proto.hasAgree {
+            return max(Int(proto.agree.agreeNum), 0)
         }
-        return Int(proto.agreeNum)
+        return max(Int(proto.agreeNum), 0)
     }
 
     private static func firstNonEmpty(_ values: String?...) -> String? {

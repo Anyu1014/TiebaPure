@@ -1,7 +1,58 @@
 import XCTest
+import SwiftUI
 @testable import TiebaPure
 
 final class UserProfileTests: XCTestCase {
+    func testDisplayIDLookupUsesDedicatedEndpointAndVerifiesTheEchoedID() async throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "private-messages", withExtension: "json"))
+        let f = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let lookup = try XCTUnwrap(f["id_lookup"] as? [String: String]), hex = try XCTUnwrap(lookup["response_hex"])
+        let body = Data(stride(from: 0, to: hex.count, by: 2).map { offset in
+            let start = hex.index(hex.startIndex, offsetBy: offset)
+            return UInt8(hex[start..<hex.index(start, offsetBy: 2)], radix: 16)!
+        })
+        let api = makeSocialAPI { request in
+            XCTAssertEqual(request.url?.path, "/c/u/user/getUserByTiebaUid")
+            XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "cmd" })?.value, "309702")
+            return body
+        }
+        let user = try await api.userByTiebaID(XCTUnwrap(lookup["id"]), account: nil)
+        XCTAssertEqual(String(user.id), lookup["uid"])
+        do { _ = try await api.userByTiebaID("900000002", account: nil); XCTFail("mismatched ID accepted") }
+        catch { XCTAssertTrue(error is PrivateMessageError) }
+    }
+    @MainActor
+    func testPrivateMessageAndFollowActionsKeepProfileHeaderCompact() async throws {
+        let profile = UserProfile(
+            user: UserSummary(id: 99, name: "fixture", displayName: "合成用户", portrait: ""),
+            isCurrentUser: false, isFollowed: false, tiebaID: "5538528808", tiebaAge: "0.9",
+            sex: .male, location: "江苏", intro: "", backgroundURL: nil,
+            agreeCount: 14000, followingCount: 23, followerCount: 27, threadCount: 19,
+            followedForumCount: 29, followedForums: [], followedForumsVisibility: .visible
+        )
+        for width: CGFloat in [375, 440] {
+            let host = UIHostingController(rootView: UserProfileHeader(profile: profile, onSendMessage: {}, onOpenRelationship: { _ in }, onEditProfile: nil).environment(\.dynamicTypeSize, .large))
+            host.safeAreaRegions = []
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+            let previousWindow = scene.windows.first(where: \.isKeyWindow)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: width, height: 400)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; previousWindow?.makeKey() }
+            try await Task.sleep(nanoseconds: 150_000_000)
+            let size = host.sizeThatFits(in: CGSize(width: width, height: 1000))
+            XCTAssertLessThan(size.height, 200, "Buttons must not create a separate row: width=\(width), height=\(size.height)")
+            host.view.frame = CGRect(origin: .zero, size: size)
+            host.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: size).image { _ in host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true) }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "profile-header-\(Int(width))"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     private let builder = TiebaRequestBuilder(
         screenScale: 3,
         screenWidth: 1179,
@@ -155,6 +206,20 @@ final class UserProfileTests: XCTestCase {
             ),
             .visible
         )
+    }
+
+    func testUserThreadsPreserveLikeCountsIncludingZero() {
+        var data = Tiebapure_Profile_UserThreadsResponseData()
+        data.postList = [0, 123].enumerated().map { index, count in
+            var item = Tiebapure_Profile_UserThreadItem()
+            item.threadID = UInt64(index + 1)
+            item.agreeNum = Int32(count)
+            return item
+        }
+        var response = Tiebapure_Profile_UserThreadsResponse()
+        response.data = data
+        let page = UserProfileMapper.threadsPage(from: response, page: 1)
+        XCTAssertEqual(page.threads.map(\.likeCount), [0, 123])
     }
 
     func testHiddenPostResponseMapsToPrivateState() {

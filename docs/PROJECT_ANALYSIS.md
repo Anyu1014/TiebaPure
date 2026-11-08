@@ -79,7 +79,7 @@ iOS 已有可维护的源码、资源、协议定义、测试、Xcode 工程和�
 - 2 个应用图标和 3 张截图未见独立的来源/授权清单；目录元数据不能证明素材权属。本次未做图像溯源。
 - 贴吧表情从 tb2.bdstatic.com 动态下载；帖子图片、头像、音视频也依赖外部内容。可下载不等于已获得素材再分发许可，代码的 GPL 不能替代内容权利。
 - 字体功能是用户导入 ttf/otf；仓库没有发现随包字体文件，后续若新增字体须单独核实。
-- README 感谢 TiebaLite、aiotieba；Protos README 自称自行维护最小协议定义。这些是项目声明，不能替代逐文件的历史来源审计。
+- README 感谢 TiebaPure、aiotieba；Protos README 自称自行维护最小协议定义。这些是项目声明，不能替代逐文件的历史来源审计。
 - 百度名称、标识与服务授权不由本仓库的代码许可授予。若以后上架 App Store，还需核实 Apple 5.2 的知识产权、第三方服务和媒体要求；本报告不对商店合同与 GPL 的兼容性作最终定论。
 
 [资源目录](https://github.com/infinityf4p/TiebaPure-iOS/tree/5a87225190d6a79b1e3ad3b7d846edd407d416c7/TiebaPure/Resources/Assets.xcassets)、[截图](https://github.com/infinityf4p/TiebaPure-iOS/tree/5a87225190d6a79b1e3ad3b7d846edd407d416c7/docs/images)、[动态表情](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/TiebaPure/Domain/Models/TiebaEmoticonRepository.swift)、[字体导入](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/TiebaPure/Domain/Models/ReadingPreferences.swift)、[协议来源说明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/Protos/README.md)、[项目声明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/README.md)、[Apple 审核规则 5.2](https://developer.apple.com/app-store/review/guidelines/#intellectual-property)
@@ -88,7 +88,7 @@ iOS 已有可维护的源码、资源、协议定义、测试、Xcode 工程和�
 
 **判断：可行性高，优先保留现有 SwiftUI 与 UIKit 互操作实现。**
 
-有现成 .xcodeproj、共享 Scheme、project.yml、锁定依赖和生成后的协议代码。日常构建可以从已提交工程开始；只有改协议或重生成时，才需要 protoc 及匹配的 protoc-gen-swift 1.38.1，不能把生成器缺失误判成源码缺失。[工程配置](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/project.yml)、[Protobuf 说明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/Protos/README.md)、[生成脚本](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/scripts/generate-ios-protos.sh)
+有现成 .xcodeproj、共享 Scheme、project.yml、锁定依赖和生成后的协议代码。日常构建可以从已提交工程开始；只有改协议或重生成时，才需要 protoc 及匹配的 protoc-gen-swift 1.38.1，不能把生成器缺失误判成源码缺失。[工程配置](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/project.yml)、[Protobuf 说明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/Protos/README.md)、[生成脚本](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/tool/tiebapure/generate-ios-protos.sh)
 
 未来如做独立改名版本，需一起核对主应用与扩展 Bundle ID/版本、Display Name、URL Scheme、导出备份类型标识、关于页来源和图标。Keychain service、UserDefaults 命名及原用户数据的迁移策略也要明确；仅替换一个显示名称不足以形成干净的独立配置。[主应用 plist](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/TiebaPure/Resources/Info.plist)、[配置](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/project.yml)、[账号存储](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/TiebaPure/Core/Auth/AccountStore.swift)
 

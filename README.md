@@ -1,13 +1,17 @@
-# TiebaLite
+# TiebaPure
 
-Anyu 维护的非官方百度贴吧客户端。源码及双端签名安装包为 **1.1（build 67）**，应用标识 `dev.anyu.tiebalite`。iOS 使用 SwiftUI，Android 使用 Kotlin 与 Compose。与百度及贴吧官方无隶属、授权或认可关系。
+Anyu 维护的非官方百度贴吧客户端，原名 TiebaLite。当前版本为 **2.3（双端 build87）**；已有双端签名安装包，未安装到手机。iOS使用SwiftUI，Android使用Kotlin与Compose；与百度及贴吧官方无隶属、授权或认可关系。
 
-1.1包含回复输入焦点卡死修复、评论错误回包识别、双端发帖/楼中楼时间格式、Android全局紧凑顶栏及贴吧分类调整；源码保存在[1.1分支](https://github.com/Anyu1014/TiebaLite/tree/1.1)。
+2.3包含 Android 私信输入框键盘避让及评论回复条宽度调整，并统一双端会话排序、一键已读、数字角标居中、私信媒体上传和语音解析修正。底栏保留1.3浮层样式、高度、文字、头像与位置，见[底栏说明](docs/BOTTOM_BAR.md)。
 
-本地1.1变更与验证见[1.1记录](docs/releases/1.1.md)：双端贴吧原生表情覆盖正文、评论、楼中楼、预览及输入框，内置59个常用原图；iOS只保留下方回复入口，Android回帖条固定屏幕底部。单条楼中楼也可展开至本人回复的删除入口。签名包为`lastest/TiebaLite-1.1.apk`与`lastest/TiebaLite-1.1.ipa`。1.1签名包保留在本机；以下链接为既有公开1.0发行。
+保留此前草稿恢复/清空、发帖图片、私信媒体/表情/已读、楼层与排序、回帖返回保位、用户主题点赞及预览计数修复。最新验证和限制见[开发记录](docs/PROGRESS.md)及[2.3记录](docs/releases/2.3.md)。应用标识继续使用`dev.anyu.tiebapure`。
 
-- [1.0 源码分支](https://github.com/Anyu1014/TiebaLite/tree/1.0)
-- [1.0 发行版与安装包](https://github.com/Anyu1014/TiebaLite/releases/tag/1.0)
+2.3安装包位于项目根的`build/latest/TiebaPure-2.3.apk`和`build/latest/TiebaPure-2.3.ipa`，均为build87；旧2.2包及更早版本由脚本自动归档到`build/history/`。历史记录见[2.2记录](docs/releases/2.2.md)。
+
+此前版本见[1.3记录](docs/releases/1.3.md)、[1.1记录](docs/releases/1.1.md)；以下为既有公开1.0发行。
+
+- [1.0 源码分支](https://github.com/Anyu1014/TiebaPure/tree/1.0)
+- [1.0 发行版与安装包](https://github.com/Anyu1014/TiebaPure/releases/tag/1.0)
 - [本版变化和验收范围](docs/releases/1.0.md)
 
 ## 1.0
@@ -15,13 +19,13 @@ Anyu 维护的非官方百度贴吧客户端。源码及双端签名安装包为
 - iOS 26/27 使用系统原生标签栏，液态玻璃和拖动选择由系统管理；旧版 iOS 使用兼容悬浮栏。
 - Android 统一三栏布局，磨砂参考 Anyu；内容延伸至屏幕底部，评论区采用分层楼中楼预览。
 - 刷到底部自动续载，顶部下拉手动刷新；从其他底栏页面切回首页保留内容和位置。
-- 关于页显示版本1.0、作者Anyu，源码链接指向本仓库，GPL许可条目名称显示TiebaLite。
+- 关于页显示版本1.0、作者Anyu，源码链接指向本仓库，GPL许可条目名称显示TiebaPure。
 
 ## 安装包
 
-本机`lastest/`与`releases/`为工作区内的同级文件夹：`lastest/`保留当前APK和签名IPA各一份；`releases/`保存历史版本。生成不同内容的同平台新包时，旧包自动移入`releases/`后再替换当前包，不影响另一平台。相同SHA256不重复保存；Debug包与未签名IPA直接归入`releases/`，不替换当前签名包。构建校验记录在`.build/release-records/`；目录整理不会更新GitHub发行。
+本机`build/latest/`与`build/history/`为项目根 `build/` 下的同级文件夹：`latest/` 保留当前 APK 和签名 IPA 各一份；`history/` 保存历史版本。生成不同内容的同平台新包时，旧包自动移入 `history/` 后再替换当前包。
 
-发行版提供 `TiebaLite-1.0.apk`（Android签名Release）与 `TiebaLite-1.0-unsigned.ipa`（iOS可重签包），以及对应源码zip、manifest和SHA256校验文件。
+发行版提供 `TiebaPure-1.0.apk`（Android签名Release）与 `TiebaPure-1.0-unsigned.ipa`（iOS可重签包），以及对应源码zip、manifest和SHA256校验文件。
 
 iOS 开发签名与通用分发不同：本机可以为已登记设备签名安装，开发签名包含设备描述文件且有有效期限。公开发行保留未签名IPA供使用者自行签名。签名私钥、密码、描述文件和设备备份不会进入源码仓库或源码zip。
 
@@ -31,10 +35,12 @@ iOS 开发签名与通用分发不同：本机可以为已登记设备签名安�
 
 ```sh
 source /Users/y/toolchains/env.sh
-/Users/y/toolchains/bin/node --test scripts/config.test.mjs
-bash scripts/build-ios.sh ipa
-bash scripts/build-android.sh lintDebug
+/Users/y/toolchains/bin/node --test tool/tiebapure/config.test.mjs
+bash tool/tiebapure/build-ios.sh ipa
+bash tool/tiebapure/build-android.sh lintDebug
 ```
+
+仅清空项目临时物：`bash tool/tiebapure/build-ios.sh clean`（保留源码、依赖、编译缓存与产物）。
 
 Release签名及设备安装方法见 [Android构建](docs/BUILD_ANDROID.md)、[iOS构建](docs/BUILD_IOS.md)。主要工具为Xcode27、JDK21、Android SDK36和Gradle8.14.3。
 
@@ -50,4 +56,4 @@ Release签名及设备安装方法见 [Android构建](docs/BUILD_ANDROID.md)、[
 
 Android原生检查覆盖自动续载、下拉刷新、首页返回和许可正文。iOS区分编译、签名、安装、启动及手动体验验收；真机启动不等于所有业务通过验收。真实账号写操作和完整系统版本矩阵尚未验收。
 
-`previews/ios-layout.html` 是早期网页布局示意，不能代表最新系统原生液态玻璃。开发使用 `ios/` 与 `android/`；本机完整只读上游克隆 `original-source/` 不重复放入源码zip。
+早期网页布局示意（本地临时预览页 `.cache/previews/`，不随仓库分发）不代表最新系统原生液态玻璃。开发使用 `ios/` 与 `android/`；本机完整只读上游克隆 `original-source/` 不重复放入源码zip。

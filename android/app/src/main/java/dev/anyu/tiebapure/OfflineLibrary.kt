@@ -152,7 +152,7 @@ class OfflineLibrary(private val context: Context, private val api: TiebaApi, pr
                 }
                 folder = if (type.first.startsWith("video/")) "Movies" else "Music"
             }
-            return PreparedExport(output, type.first, "TiebaLite-${System.currentTimeMillis()}.${type.second}", folder)
+            return PreparedExport(output, type.first, "TiebaPure-${System.currentTimeMillis()}.${type.second}", folder)
         } catch (e: Exception) { output.delete(); throw e }
     }
     companion object {

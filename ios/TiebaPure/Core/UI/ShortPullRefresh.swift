@@ -857,7 +857,7 @@ private struct ShortPullRefreshModifier: ViewModifier {
 /// Observes the `UIScrollView`'s own pan recognizer. It adds only a target to
 /// the existing recognizer, so native iOS navigation gestures keep their
 /// normal arbitration and no second gesture competes for the same touch.
-private struct ShortPullScrollViewPanObserver: UIViewRepresentable {
+struct ShortPullScrollViewPanObserver: UIViewRepresentable {
     let surfaceColor: UIColor
     let observesPan: Bool
     let onStateChange: (UIGestureRecognizer.State, CGSize) -> Void
@@ -1094,7 +1094,7 @@ private struct ShortPullScrollViewPanObserver: UIViewRepresentable {
             )
         }
 
-        private static func enclosingScrollView(startingAt view: UIView) -> UIScrollView? {
+        static func enclosingScrollView(startingAt view: UIView, minimumOverlap: CGFloat = 0.5) -> UIScrollView? {
             var current: UIView? = view.superview
             while let candidate = current {
                 if let scrollView = candidate as? UIScrollView {
@@ -1129,7 +1129,7 @@ private struct ShortPullScrollViewPanObserver: UIViewRepresentable {
                     scrollView: bestMatch,
                     attachmentFrame: attachmentFrame,
                     window: window
-                ) > 0.5 {
+                ) > minimumOverlap {
                     return bestMatch
                 }
                 current = ancestor.superview

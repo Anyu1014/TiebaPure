@@ -41,6 +41,24 @@ class StorageInstrumentedTest {
         assertFalse(backup.contains(account.bduss)); assertFalse(backup.contains("private draft"))
         store.saveAccount(null); assertNull(store.loadAccount())
     }
+    @Test fun automationHistoryDeletionPersistsMinimalMarkersWithoutLeakingAcrossAccounts() {
+        val repo = AndroidAutoReplyRepository(store) {}
+        val job = AutoReplyJob("11", "private title", "rule", "rev", "7", "测试", listOf("收物"), "private reply", 30, 100, 130, AutoReplyStatus.QUEUED)
+        repo.saveJob("99", job); repo.saveJob("99", job.copy(threadId = "12")); repo.saveJob("100", job)
+        repo.deleteJobs("99", setOf("11"))
+        assertEquals(listOf("12"), repo.jobs("99").map { it.threadId })
+        assertEquals(1, repo.jobs("100").size)
+        val fresh = AndroidAutoReplyRepository(store) {}
+        assertTrue(fresh.wasDeleted("99", "11")); assertFalse(fresh.wasDeleted("100", "11"))
+        val deletingFresh = AndroidAutoReplyRepository(store) {}
+        deletingFresh.deleteJobs("99", setOf("12")); assertTrue(deletingFresh.wasDeleted("99", "11"))
+        deletingFresh.saveJob("99", job.copy(status = AutoReplyStatus.SENT)); assertTrue(deletingFresh.jobs("99").isEmpty())
+        val rows = store.list("automation").filter { it.first.startsWith("99:") }
+        assertTrue(rows.all { it.second.keys().asSequence().toSet() == setOf("threadId") })
+        val reload = AndroidAutoReplyRepository(store) {}
+        assertTrue(reload.wasDeleted("99", "11")); assertTrue(reload.wasDeleted("99", "12"))
+        assertFalse(store.backup().toString(Charsets.UTF_8).contains("private reply"))
+    }
     @Test fun malformedImportLeavesExistingHistoryIntact() {
         store.put("history", "42", Thread("42", "kept").json())
         val bad = """{"format":"tiebapure-android","version":1,"rows":[{"kind":"history","id":"42","data":{"id":"42"}}]}"""

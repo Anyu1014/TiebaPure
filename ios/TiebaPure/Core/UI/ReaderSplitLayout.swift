@@ -2,6 +2,8 @@ import SwiftUI
 
 enum ThreadDetailInitialDestination: Hashable {
     case replies
+    case mainPost
+    case subpost(parentPostID: UInt64, subpostID: UInt64)
 }
 
 /// Identity of a thread shown in the trailing detail column of the

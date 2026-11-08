@@ -753,6 +753,7 @@ private struct MiniForumPageDTO: Decodable {
             case viewCount = "view_num"
             case likeCount = "agree_num"
             case likeCountCamel = "agreeNum"
+            case agree
             case lastTimeInt = "last_time_int"
             case createTime = "create_time"
             case authorID = "author_id"
@@ -778,11 +779,13 @@ private struct MiniForumPageDTO: Decodable {
             title = container.decodeStringIfPresent(forKey: .title) ?? ""
             replyCount = Int(container.decodeStringIfPresent(forKey: .replyCount) ?? "") ?? 0
             viewCount = Int(container.decodeStringIfPresent(forKey: .viewCount) ?? "") ?? 0
-            likeCount = Int(
-                container.decodeStringIfPresent(forKey: .likeCount)
+            let agree = try? container.nestedContainer(keyedBy: CodingKeys.self, forKey: .agree)
+            likeCount = max(Int(
+                agree?.decodeStringIfPresent(forKey: .likeCount)
+                    ?? container.decodeStringIfPresent(forKey: .likeCount)
                     ?? container.decodeStringIfPresent(forKey: .likeCountCamel)
                     ?? ""
-            ) ?? 0
+            ) ?? 0, 0)
             authorID = Int64(container.decodeStringIfPresent(forKey: .authorID) ?? "") ?? 0
             isTop = container.decodeStringIfPresent(forKey: .isTop) == "1"
             isGood = container.decodeStringIfPresent(forKey: .isGood) == "1"

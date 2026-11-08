@@ -5,6 +5,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SubmissionPolicyTest {
+    @Test fun imageThreadsEscapeTextAndRejectInjectedUploadIds() {
+        assertEquals("<原文>", SubmissionPolicy.threadContent("<原文>", emptyList()))
+        assertEquals("&lt;标题&gt;&amp;<br>正文<br><img class=\"BDE_Image\" src=\"https://tiebapic.baidu.com/forum/pic/item/fixture_pic_1.jpg\">", SubmissionPolicy.threadContent("<标题>&\n正文", listOf("fixture_pic_1")))
+        assertEquals("<img class=\"BDE_Image\" src=\"https://tiebapic.baidu.com/forum/pic/item/fixture_pic_1.jpg\">", SubmissionPolicy.threadContent("", listOf("fixture_pic_1")))
+        for (id in listOf("", "../evil", "x\" onerror=alert(1)")) assertTrue(runCatching { SubmissionPolicy.threadContent("", listOf(id)) }.isFailure)
+        assertTrue(runCatching { SubmissionPolicy.threadContent("", List(10) { "image" }) }.isFailure)
+    }
     @Test fun strictStatusDoesNotTreatBooleansOrFloatsAsSuccess() {
         for (value in listOf(true, 1.0, "1.0", "yes")) assertNull(SubmissionPolicy.strictInt(value))
         assertEquals(1, SubmissionPolicy.strictInt("1"))

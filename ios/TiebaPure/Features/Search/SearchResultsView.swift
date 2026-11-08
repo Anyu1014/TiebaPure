@@ -51,6 +51,10 @@ struct SearchResultsView: View {
     @State private var isLoading = false
     @State private var didLoad = false
     @State private var errorMessage: String?
+    @State private var showsUsers = false
+    @State private var userResults: [UserSummary] = []
+    @State private var userSearchError: String?
+    @State private var usersLoading = false
     @State private var filterType = 2
     @State private var sortType = 5
     @State private var activeThread: SearchThreadRoute?
@@ -84,9 +88,27 @@ struct SearchResultsView: View {
             searchBar
                 .readableWidth()
 
+            Picker("搜索类型", selection: $showsUsers) { Text("帖子").tag(false); Text("用户").tag(true) }.pickerStyle(.segmented).padding(.horizontal)
             Divider()
 
-            if submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if showsUsers {
+                ScrollView { LazyVStack {
+                    if usersLoading { ProgressView() }
+                    if let userSearchError { Text(userSearchError).foregroundStyle(.red) }
+                    ForEach(userResults) { user in
+                        Button { openUser(user) } label: {
+                            HStack { AvatarView(url: TiebaURL.avatar(user.portrait), title: user.displayNameResolved, size: 44); Text(user.displayNameResolved); Spacer() }.padding()
+                        }.buttonStyle(.plain)
+                    }
+                    if userResults.isEmpty && !usersLoading && userSearchError == nil { Text("输入昵称或主页 ID 搜索用户").foregroundStyle(.secondary).padding() }
+                } }
+                .task(id: submittedKeyword) {
+                    usersLoading = true; userSearchError = nil; userResults = []
+                    defer { usersLoading = false }
+                    do { let users = try await environment.api.searchUsers(keyword: submittedKeyword, account: account); try Task.checkCancellation(); userResults = users }
+                    catch { if !Task.isCancelled { userSearchError = error.localizedDescription } }
+                }
+            } else if submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchHistory
             } else {
                 searchResults

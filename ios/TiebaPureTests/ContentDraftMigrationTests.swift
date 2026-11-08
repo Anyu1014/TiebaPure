@@ -535,6 +535,25 @@ final class ContentDraftMigrationTests: XCTestCase {
     }
 
     @MainActor
+    func testRetryReopensBackendAfterInitialResolutionFailureWithoutDiscardingDraft() async throws {
+        let directory = try makeDirectory()
+        let backend = try FileContentDraftPersistenceBackend(directoryURL: directory)
+        let draft = makeDraft(threadID: 1, marker: 1)
+        XCTAssertTrue(backend.save(draft))
+        var attempts = 0
+        let store = ContentDraftStore(resolvingPersistence: {
+            attempts += 1
+            return attempts < 3 ? UnavailableContentDraftPersistenceBackend() : backend
+        })
+        let unavailable = await store.loadAsync(accountID: draft.accountID, target: draft.target)
+        XCTAssertEqual(unavailable, .unavailable)
+        let recovered = await store.loadAsync(accountID: draft.accountID, target: draft.target)
+        XCTAssertEqual(recovered, .loaded(draft))
+        XCTAssertEqual(attempts, 3)
+        XCTAssertEqual(backend.draft(accountID: draft.accountID, target: draft.target), draft)
+    }
+
+    @MainActor
     func testTransientSwiftDataFailureOnFirstLaunchDoesNotElectEmptyFileBackend() throws {
         let directory = try makeDirectory()
         let container = try makeContainer()

@@ -1,0 +1,23 @@
+{
+  "id_lookup": {
+    "id": "900000001",
+    "uid": "42000031",
+    "request_hex": "0a180a0b120931322e35322e312e301209393030303030303031",
+    "response_hex": "0a00122a0a28109fbd83141a0766697874757265220ce59088e68890e794a8e688b7c20709393030303030303031"
+  },
+  "official_lcs": {
+    "secret": "0123456789abcdef0123456789abcdef",
+    "key_hex": "299ff64677a0f953b121c0863c782a0992b257a5bfdb4227ba87ebdc62b98ab7",
+    "commit_hex": "0a10102a18012206e6b58be8af9530003800",
+    "cipher_hex": "9273b39f0bc1f372b36fbf897ce1a8212fd6a5567e54506186d16b2f27e6a62d"
+  },
+  "official_content": {
+    "source": "Independent protobuf wire for MsgInfo type22 eventId22001; official ijb.a and qnb.g static mappings",
+    "outgoing_hex": "080a10d804180120542a09e5b7b2e58f91e980814001582a",
+    "read_event_hex": "080b10d8041816202a2a3f7b226576656e744964223a223232303031222c226576656e74506172616d223a7b2267726f75704964223a3630302c22726561644d73674964223a31307d7d40025854",
+    "image_content": "[{\"src\":\"https://tiebapic.baidu.com/a.jpg\",\"big_src\":\"http://tiebapic.baidu.com/original.jpg\",\"type\":\"3\",\"bsize\":\"100,200\"}]",
+    "voice_content": "[{\"voice_md5\":\"0123456789abcdef0123456789abcdef\",\"during_time\":4,\"has_read\":0}]",
+    "suffixed_voice_id": "0123456789abcdef0123456789abcdef_Synthetic_2",
+    "suffixed_voice_content": "[{\"type\":10,\"voice_md5\":\"0123456789abcdef0123456789abcdef_Synthetic_2\",\"during_time\":4,\"has_read\":0,\"isUploaded\":true}]"
+  }
+}

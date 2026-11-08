@@ -3,10 +3,17 @@ import SwiftUI
 
 @main
 struct TiebaPureApp: App {
-    @StateObject private var environment = AppEnvironment.live()
+    @StateObject private var environment: AppEnvironment
+    @UIApplicationDelegateAdaptor(AutoReplyAppDelegate.self) private var automationDelegate
     @StateObject private var appearanceStore = AppAppearanceStore.live()
     @StateObject private var readingPreferencesStore = ReadingPreferencesStore.live()
     @StateObject private var readerFontStore = ReaderFontStore.shared
+
+    init() {
+        let live = AppEnvironment.live()
+        _environment = StateObject(wrappedValue: live)
+        AutoReplyBackground.coordinator = live.autoReplyCoordinator
+    }
 
     var body: some Scene {
         WindowGroup {

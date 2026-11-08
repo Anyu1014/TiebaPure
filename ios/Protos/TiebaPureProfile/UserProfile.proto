@@ -3,6 +3,7 @@ syntax = "proto3";
 package tiebapure.profile;
 
 import "Abstract.proto";
+import "Agree.proto";
 import "CommonRequest.proto";
 import "Error.proto";
 import "Media.proto";
@@ -80,6 +81,7 @@ message UserThreadItem {
   int32 agree_num = 37;
   int32 view_num = 38;
   int32 share_num = 39;
+  tieba.Agree agree = 40;
   repeated tieba.PbContent rich_title = 45;
   repeated tieba.PbContent rich_abstract = 46;
   repeated tieba.PbContent first_post_content = 49;

@@ -53,11 +53,11 @@ class PresentationInstrumentedTest {
         assertTrue(text().contains("GPL-3.0-only"))
         assertTrue(text().contains("SwiftProtobuf"))
         assertFalse(text().contains("基于 infinityf4p"))
-        assertTrue(text().contains("查看 TiebaLite 源码"))
+        assertTrue(text().contains("查看 TiebaPure 源码"))
         val screenshot = instrumentation.uiAutomation.takeScreenshot()
         File(instrumentation.targetContext.getExternalFilesDir(null), "about-1.0.png").outputStream().use { screenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }
         screenshot.recycle()
-        instrumentation.runOnMainSync { vm.navigate(Route("license", "LICENSE", "TiebaLite")) }
+        instrumentation.runOnMainSync { vm.navigate(Route("license", "LICENSE", "TiebaPure")) }
         eventually { text().contains("GNU GENERAL PUBLIC LICENSE") }
         instrumentation.runOnMainSync { vm.navigate(Route("license", "licenses/SwiftProtobuf-Apache-2.0.txt", "SwiftProtobuf")) }
         eventually { text().contains("Apache License") }
@@ -68,7 +68,7 @@ class PresentationInstrumentedTest {
         val homeData = vm.data
         val homePage = vm.page
         instrumentation.runOnMainSync { vm.navigate(Route("me"), root = true) }
-        eventually { text().contains("关于 TiebaLite") }
+        eventually { text().contains("关于 TiebaPure") }
         instrumentation.runOnMainSync { vm.navigate(Route("home"), root = true) }
         assertSame("Tab return must restore home without requesting a refresh", homeData, vm.data)
         assertEquals(homePage, vm.page)

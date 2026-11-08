@@ -75,6 +75,8 @@ struct ThreadDetailView: View {
     @State private var accountFavoriteTask: Task<Void, Never>?
     @State private var accountFavoriteGeneration = 0
     @State private var accountFavoriteError: String?
+    @State private var inlineReplyTarget: ContentSubmissionTarget?
+    @State private var inlineReplyFocusRequest = 0
     @State private var composerRoute: ContentComposerRoute?
     @State private var pendingSubmissionReceipt: ContentSubmissionReceipt?
     @State private var pendingSubmissionTarget: ContentSubmissionTarget?
@@ -149,17 +151,9 @@ struct ThreadDetailView: View {
                     .zIndex(2)
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if threadPage != nil,
-                   selectedSubpostPost == nil,
-                   contentSubmissionSettingsStore.repliesEnabled {
-                    ContentReplyEntryBar(
-                        title: "回复帖子",
-                        accessibilityIdentifier: "thread-compose-reply-button",
-                        action: openThreadReplyComposer
-                    )
-                }
-            }
+            .floatingReplyComposer(account: account, target: resolvedInlineReplyTarget,
+                active: threadPage != nil && selectedSubpostPost == nil && contentSubmissionSettingsStore.repliesEnabled,
+                focusRequest: inlineReplyFocusRequest, resetTarget: { inlineReplyTarget = nil; inlineReplyFocusRequest += 1 })
             .overlay(alignment: .top) {
                 if showsRestoredReadingBanner {
                     RestoredReadingBanner(
@@ -1028,6 +1022,12 @@ struct ThreadDetailView: View {
         if selectedSubpostPost?.id == id { selectedSubpostPost = nil }
     }
 
+    private var resolvedInlineReplyTarget: ContentSubmissionTarget? {
+        if let inlineReplyTarget { return inlineReplyTarget }
+        guard let page = threadPage, let forum = resolvedForum(for: page) else { return nil }
+        return .threadReply(thread: page.thread, forum: forum)
+    }
+
     private func openThreadReplyComposer() {
         guard contentSubmissionSettingsStore.repliesEnabled else {
             contentActionError = "请先在设置中开启“允许回帖”。"
@@ -1046,9 +1046,8 @@ struct ThreadDetailView: View {
             return
         }
         cancelContentNavigation()
-        composerRoute = ContentComposerRoute(
-            target: .threadReply(thread: page.thread, forum: resolvedForum)
-        )
+        inlineReplyTarget = .threadReply(thread: page.thread, forum: resolvedForum)
+        inlineReplyFocusRequest += 1
     }
 
     private func openReplyComposer(for post: Post) {
@@ -1069,9 +1068,8 @@ struct ThreadDetailView: View {
             return
         }
         cancelContentNavigation()
-        composerRoute = ContentComposerRoute(
-            target: .postReply(thread: page.thread, forum: resolvedForum, post: post)
-        )
+        inlineReplyTarget = .postReply(thread: page.thread, forum: resolvedForum, post: post)
+        inlineReplyFocusRequest += 1
     }
 
     private func handleComposerDismissed() {
@@ -1496,16 +1494,34 @@ struct ThreadDetailView: View {
     }
 
     private func requestInitialDestinationScrollIfReady() {
-        guard pendingInitialDestination == .replies,
-              isReplyDestinationTargetReady else { return }
+        switch pendingInitialDestination {
+        case .replies:
+            guard isReplyDestinationTargetReady else { return }
+        case .mainPost:
+            guard mainPost != nil else { return }
+        case let .subpost(parentPostID, subpostID):
+            guard let parent = posts.first(where: { $0.id == parentPostID }) ?? mainPost.flatMap({ $0.id == parentPostID ? $0 : nil }) else { return }
+            pendingInitialDestination = nil
+            pendingSubpostInitialID = subpostID
+            selectedSubpostPost = parent
+            return
+        case nil: return
+        }
         initialDestinationScrollRequest &+= 1
     }
 
     private func performInitialDestinationScroll(proxy: ScrollViewProxy) {
-        guard pendingInitialDestination == .replies,
-              isReplyDestinationTargetReady else { return }
-        pendingInitialDestination = nil
-        proxy.scrollTo(ThreadDetailScrollTarget.replies, anchor: .top)
+        switch pendingInitialDestination {
+        case .replies:
+            guard isReplyDestinationTargetReady else { return }
+            pendingInitialDestination = nil
+            proxy.scrollTo(ThreadDetailScrollTarget.replies, anchor: .top)
+        case .mainPost:
+            guard let mainPost else { return }
+            pendingInitialDestination = nil
+            proxy.scrollTo(mainPost.id, anchor: .top)
+        default: break
+        }
     }
 
     private func performScrollRequest(
@@ -1983,7 +1999,13 @@ struct ThreadDetailView: View {
             visiblePage.mainPost = mergedMainPost.flatMap {
                 postApplyingCurrentBlocklist($0, isMainPost: true)
             }
+            if var main = visiblePage.mainPost {
+                main.likeCount = visiblePage.thread.likeCount
+                main.isLiked = visiblePage.thread.isLiked
+                visiblePage.mainPost = main
+            }
             threadPage = visiblePage
+            environment.threadCountersState.record(visiblePage.thread, session: requestedSession)
             if requestedPage == 1 {
                 posts = visiblePage.posts
                 pendingInitialPostID = nil
@@ -2015,6 +2037,9 @@ struct ThreadDetailView: View {
                         if isResumingReadingPosition {
                             showRestoredReadingBanner()
                         }
+                    } else if !isResumingReadingPosition, requestedPostID == initialPostID {
+                        errorMessage = "未能定位该回复，可能已被删除。"
+                        pendingInitialDestination = nil
                     } else if isResumingReadingPosition {
                         // The saved post no longer exists; fall back to the
                         // first page and forget the stale position.
@@ -2083,6 +2108,7 @@ struct ThreadDetailView: View {
                 consecutiveHiddenPageCount: continuation.consecutiveHiddenPageCount
             )
         } else if didCompletePage {
+            requestInitialDestinationScrollIfReady()
             requestPendingAutomaticPageLoadIfPossible()
         }
     }
@@ -2135,6 +2161,11 @@ struct ThreadDetailView: View {
             }
             for index in page.posts.indices where page.posts[index].id == postID {
                 updateLikeState(of: &page.posts[index], liked: liked)
+            }
+            if let main = page.mainPost ?? page.posts.first(where: { $0.floor == 1 }), main.id == postID {
+                page.thread.likeCount = main.likeCount
+                page.thread.isLiked = main.isLiked
+                environment.threadCountersState.record(page.thread, session: account?.sessionIdentity)
             }
             threadPage = page
         }
@@ -2784,6 +2815,8 @@ private struct SubpostListSheet: View {
     @State private var updatingLikeIDs = Set<UInt64>()
     @State private var likeTasks: [UInt64: Task<Void, Never>] = [:]
     @State private var likeActionError: String?
+    @State private var inlineReplyTarget: ContentSubmissionTarget?
+    @State private var inlineReplyFocusRequest = 0
     @State private var composerRoute: ContentComposerRoute?
     @State private var contentActionError: String?
     @State private var pendingSubmittedSubpostID: UInt64?
@@ -2948,6 +2981,9 @@ private struct SubpostListSheet: View {
                     .background(TiebaPureTheme.ColorToken.readerGroupedBackground)
                 }
                 }
+                .floatingReplyComposer(account: account, target: inlineReplyTarget ?? .postReply(thread: thread, forum: forum, post: post),
+                    active: selectedUser == nil && contentSubmissionSettingsStore.repliesEnabled,
+                    focusRequest: inlineReplyFocusRequest, resetTarget: { inlineReplyTarget = nil; inlineReplyFocusRequest += 1 })
                 .navigationTitle(SubpostSheetTitle.text(
                     floor: post.floor,
                     count: max(post.subpostCount, subposts.count)
@@ -3133,9 +3169,8 @@ private struct SubpostListSheet: View {
             return
         }
         cancelSubmissionReload()
-        composerRoute = ContentComposerRoute(
-            target: .postReply(thread: thread, forum: forum, post: post)
-        )
+        inlineReplyTarget = .postReply(thread: thread, forum: forum, post: post)
+        inlineReplyFocusRequest += 1
     }
 
     private func openSubpostReplyComposer(_ subpost: Subpost) {
@@ -3148,14 +3183,8 @@ private struct SubpostListSheet: View {
             return
         }
         cancelSubmissionReload()
-        composerRoute = ContentComposerRoute(
-            target: .subpostReply(
-                thread: thread,
-                forum: forum,
-                parentPost: post,
-                subpost: subpost
-            )
-        )
+        inlineReplyTarget = .subpostReply(thread: thread, forum: forum, parentPost: post, subpost: subpost)
+        inlineReplyFocusRequest += 1
     }
 
     private func openUser(_ user: UserSummary) {

@@ -1182,18 +1182,43 @@ final class SwiftDataContentDraftPersistenceBackend: ContentDraftMigrationDestin
 
 @MainActor
 final class ContentDraftStore {
-    private let persistence: any ContentDraftPersistenceBackend
+    private var persistence: any ContentDraftPersistenceBackend
+    private var resolvePersistence: (() -> any ContentDraftPersistenceBackend)?
+    private let makeRecoveryStore: (() throws -> ContentDraftRecoveryStore)?
+    private var confirmsMissingDraft: ((String, ContentSubmissionTarget) async -> Bool)?
 
     var persistenceAvailability: PersistenceAvailability {
         persistence.persistenceAvailability
     }
 
-    init(persistence: any ContentDraftPersistenceBackend) {
+    init(
+        persistence: any ContentDraftPersistenceBackend,
+        recoveryStore: (() throws -> ContentDraftRecoveryStore)? = nil
+    ) {
         self.persistence = persistence
+        makeRecoveryStore = recoveryStore
+    }
+
+    init(
+        resolvingPersistence: @escaping () -> any ContentDraftPersistenceBackend,
+        recoveryStore: (() throws -> ContentDraftRecoveryStore)? = nil,
+        confirmsMissingDraft: ((String, ContentSubmissionTarget) async -> Bool)? = nil
+    ) {
+        self.confirmsMissingDraft = confirmsMissingDraft
+        persistence = resolvingPersistence()
+        resolvePersistence = resolvingPersistence
+        makeRecoveryStore = recoveryStore
     }
 
     convenience init() {
-        self.init(persistence: ContentDraftPersistenceFactory.makeApplicationBackend())
+        self.init(
+            resolvingPersistence: { ContentDraftPersistenceFactory.makeApplicationBackend() },
+            recoveryStore: {
+                let location = try SecurePersistenceLocation.applicationSupport()
+                return ContentDraftRecoveryStore(directoryURL: location.directoryURL.appendingPathComponent("content-draft-recovery", isDirectory: true))
+            },
+            confirmsMissingDraft: { await ContentDraftPersistenceFactory.confirmsMissingDraft(accountID: $0, target: $1) }
+        )
     }
 
     @available(iOS 17.0, *)
@@ -1213,27 +1238,58 @@ final class ContentDraftStore {
         target: ContentSubmissionTarget,
         into draft: inout ContentDraft?
     ) -> Bool {
-        persistence.load(accountID: accountID, target: target, into: &draft)
+        do {
+            return try backend(accountID: accountID, target: target).load(accountID: accountID, target: target, into: &draft)
+        } catch {
+            draft = nil
+            PersistenceDiagnostics.report(error, operation: "resolve recovered content draft")
+            return false
+        }
     }
 
     func draft(accountID: String, target: ContentSubmissionTarget) -> ContentDraft? {
-        persistence.draft(accountID: accountID, target: target)
+        var result: ContentDraft?
+        guard load(accountID: accountID, target: target, into: &result) else { return nil }
+        return result
     }
 
     func loadAsync(
         accountID: String,
         target: ContentSubmissionTarget
     ) async -> ContentDraftLoadOutcome {
-        await persistence.loadAsync(accountID: accountID, target: target)
+        do {
+            if let recovered = try makeRecoveryStore?().backend(accountID: accountID, target: target) {
+                return await recovered.loadAsync(accountID: accountID, target: target)
+            }
+            // Startup file protection can recover after unlock; Retry must reopen the backend.
+            if persistence is UnavailableContentDraftPersistenceBackend, let resolvePersistence {
+                persistence = resolvePersistence()
+            }
+            let outcome = await persistence.loadAsync(accountID: accountID, target: target)
+            if outcome == .unavailable, Task.isCancelled == false,
+               await confirmsMissingDraft?(accountID, target) == true {
+                // Both underlying stores confirmed this target is absent; no existing draft is discarded.
+                try? makeRecoveryStore?().reset(accountID: accountID, target: target)
+                return .loaded(nil)
+            }
+            return outcome
+        } catch {
+            PersistenceDiagnostics.report(error, operation: "resolve recovered content draft")
+            return .unavailable
+        }
     }
 
     @discardableResult
     func save(_ draft: ContentDraft) -> Bool {
-        persistence.save(draft)
+        do { return try backend(accountID: draft.accountID, target: draft.target).save(draft) }
+        catch {
+            PersistenceDiagnostics.report(error, operation: "resolve recovered content draft")
+            return false
+        }
     }
 
     func saveAsync(_ draft: ContentDraft) async throws {
-        try await persistence.saveAsync(draft)
+        try await backend(accountID: draft.accountID, target: draft.target).saveAsync(draft)
     }
 
     @discardableResult
@@ -1275,12 +1331,34 @@ final class ContentDraftStore {
 
     @discardableResult
     func delete(accountID: String, target: ContentSubmissionTarget) -> Bool {
-        persistence.delete(accountID: accountID, target: target)
+        do { return try backend(accountID: accountID, target: target).delete(accountID: accountID, target: target) }
+        catch {
+            PersistenceDiagnostics.report(error, operation: "resolve recovered content draft")
+            return false
+        }
+    }
+
+    func reset(accountID: String, target: ContentSubmissionTarget) throws {
+        guard let recovery = try makeRecoveryStore?() else { throw ContentDraftPersistenceError.unavailable }
+        try recovery.reset(accountID: accountID, target: target)
+        if persistence.persistenceAvailability.canPersist {
+            _ = persistence.delete(accountID: accountID, target: target)
+        }
+    }
+
+    private func backend(accountID: String, target: ContentSubmissionTarget) throws -> any ContentDraftPersistenceBackend {
+        if let recovered = try makeRecoveryStore?().backend(accountID: accountID, target: target) { return recovered }
+        return persistence
     }
 
     @discardableResult
     func clear(accountID: String) -> Bool {
-        persistence.clear(accountID: accountID)
+        do { try makeRecoveryStore?().clear(accountID: accountID) }
+        catch {
+            PersistenceDiagnostics.report(error, operation: "clear recovered content drafts")
+            return false
+        }
+        return persistence.clear(accountID: accountID)
     }
 
     @discardableResult

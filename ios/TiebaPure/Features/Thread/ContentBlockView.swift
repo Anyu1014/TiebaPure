@@ -697,6 +697,25 @@ final class InlineContentTextView: UITextView {
         }
     }
 
+    func contentFittingSize(
+        maximumWidth: CGFloat,
+        attributedText: NSAttributedString,
+        renderID: UInt? = nil,
+        maximumNumberOfLines: Int,
+        lineBreakMode: NSLineBreakMode
+    ) -> CGSize {
+        let limit = max(1, maximumWidth)
+        let natural = attributedText.boundingRect(
+            with: CGSize(width: limit, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil
+        )
+        return fittingSize(
+            width: min(limit, max(1, ceil(natural.width))),
+            attributedText: attributedText, renderID: renderID,
+            maximumNumberOfLines: maximumNumberOfLines, lineBreakMode: lineBreakMode
+        )
+    }
+
     func fittingSize(
         width: CGFloat,
         attributedText: NSAttributedString,
@@ -1088,6 +1107,7 @@ struct InlineContentText: UIViewRepresentable {
     var highlightKeyword: String?
     var allowsLinkInteraction = true
     var allowsTextSelection = false
+    var maximumContentWidth: CGFloat?
     var accessibilityIdentifier: String?
     var onOpenUser: ((UserSummary) -> Void)?
     var onPlainTextTap: (() -> Void)?
@@ -1205,10 +1225,18 @@ struct InlineContentText: UIViewRepresentable {
         uiView: InlineContentTextView,
         context: Context
     ) -> CGSize? {
-        guard let width = proposal.width else {
+        guard let width = proposal.width ?? maximumContentWidth else {
             return nil
         }
         let rendered = renderedContent(using: context.coordinator)
+        if let maximumContentWidth {
+            return uiView.contentFittingSize(
+                maximumWidth: min(width, maximumContentWidth),
+                attributedText: rendered.attributedString, renderID: rendered.id,
+                maximumNumberOfLines: ThreadContentDisplayPolicy.maximumNumberOfLines(for: lineLimit),
+                lineBreakMode: ThreadContentDisplayPolicy.lineBreakMode(for: lineLimit)
+            )
+        }
         return uiView.fittingSize(
             width: width,
             attributedText: rendered.attributedString,

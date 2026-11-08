@@ -69,7 +69,8 @@ struct TiebaHTTPClient {
         _ endpoint: TiebaEndpoint,
         fields: [String: String],
         headers: [String: String] = [:],
-        signingSecret: String? = nil
+        signingSecret: String? = nil,
+        responseValidator: (@Sendable (URLResponse) throws -> Void)? = nil
     ) async throws -> Data {
         var request = URLRequest(url: endpoint.url)
         var requestFields = fields
@@ -90,7 +91,8 @@ struct TiebaHTTPClient {
 
         let (data, response) = try await BoundedURLSession(session: session).data(
             for: request,
-            maximumBytes: maximumResponseBytes
+            maximumBytes: maximumResponseBytes,
+            responseValidator: responseValidator
         )
         try validate(response: response, data: data)
         return data

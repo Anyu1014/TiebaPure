@@ -61,6 +61,86 @@ class ReplyFlowInstrumentedTest {
         inst.waitForIdleSync()
     }
 
+    @Test fun delayedSuccessfulReplyDoesNotCloseANewVisitToTheSameComposer() {
+        val activity = inst.startActivitySync(Intent().setClassName(inst.targetContext, MainActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) as MainActivity
+        lateinit var vm: AppViewModel
+        inst.runOnMainSync { vm = ViewModelProvider(activity)[AppViewModel::class.java] }
+        assumeTrue("Run only in the anonymous project lab", vm.account == null)
+        @Suppress("UNCHECKED_CAST")
+        val account = AppViewModel::class.java.getDeclaredField("account\$delegate").apply { isAccessible = true }.get(vm) as MutableState<Account?>
+        val clientField = TiebaApi::class.java.getDeclaredField("client").apply { isAccessible = true }
+        val oldClient = clientField.get(vm.api)
+        val oldPreference = vm.store.prefs.all["allow-replies"]
+        val oldHistory = vm.store.get("history", "42")
+        val oldPosition = vm.store.get("position", "42")
+        val draftKey = "84:delayed-reply-fixture"
+        val oldDraft = vm.store.get("draft", draftKey)
+        val started = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            val payload: ByteArray
+            val type: String
+            when (request.url.encodedPath) {
+                "/c/f/pb/page" -> {
+                    payload = PbPageResponse.newBuilder().setData(PbPageResponseData.newBuilder()
+                        .setThread(ThreadInfo.newBuilder().setId(42).setTitle("延迟回复夹具"))
+                        .setForum(SimpleForum.newBuilder().setId(1).setName("测试评论"))
+                        .addPostList(WirePost.newBuilder().setId(100).setFloor(1).addContent(PbContent.newBuilder().setText("首楼"))))
+                        .build().toByteArray()
+                    type = "application/x-protobuf"
+                }
+                "/f/commit/share/fnameShareApi" -> { payload = """{"error_code":0,"data":{"fid":"1"}}""".toByteArray(); type = "application/json" }
+                "/c/s/login" -> { payload = """{"error_code":0,"anti":{"tbs":"fixture-token"}}""".toByteArray(); type = "application/json" }
+                "/mo/q/apubpost" -> {
+                    started.countDown()
+                    check(finish.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                    payload = """{"no":0,"data":{"tid":"42","pid":"300"}}""".toByteArray(); type = "application/json"
+                }
+                else -> throw IOException("Unexpected fixture route")
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(payload.toResponseBody(type.toMediaType())).build()
+        }.build()
+        try {
+            clientField.set(vm.api, client)
+            inst.runOnMainSync {
+                account.value = Account("84", "夹具账号", "fixture-bduss", "fixture-stoken", "fixture-tbs")
+                vm.setContentPreferences(replies = true)
+                vm.navigate(Route("thread", "42"), root = true)
+            }
+            eventually { !vm.loading && vm.data.posts.isNotEmpty() }
+            inst.runOnMainSync {
+                vm.compose("测试评论", "42")
+                vm.submitDraft("", "只在拦截器中提交的回复", emptyList(), draftKey)
+            }
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            inst.runOnMainSync {
+                assertTrue(vm.back()); vm.compose("测试评论", "42")
+                vm.store.put("draft", draftKey, JSONObject().put("text", "新一轮编辑"))
+            }
+            finish.countDown()
+            eventually { !vm.submitting }
+            inst.runOnMainSync {
+                assertEquals("An old receipt must leave the new editor open", "compose", vm.route.kind)
+                assertEquals("新一轮编辑", vm.store.get("draft", draftKey)?.optString("text"))
+                assertTrue(vm.back())
+                assertEquals("thread", vm.route.kind)
+                assertFalse("Successful completion must not leave an old composer in history", vm.back())
+            }
+        } finally {
+            finish.countDown()
+            inst.runOnMainSync {
+                vm.viewModelScope.coroutineContext.cancelChildren()
+                account.value = null
+                clientField.set(vm.api, oldClient)
+            }
+            vm.store.prefs.edit().apply { if (oldPreference is Boolean) putBoolean("allow-replies", oldPreference) else remove("allow-replies") }.commit()
+            if (oldHistory == null) vm.store.remove("history", "42") else vm.store.put("history", "42", oldHistory)
+            if (oldPosition == null) vm.store.remove("position", "42") else vm.store.put("position", "42", oldPosition)
+            if (oldDraft == null) vm.store.remove("draft", draftKey) else vm.store.put("draft", draftKey, oldDraft)
+        }
+    }
+
     @Test fun mainCommentAndSubpostUseTheRealComposerAndSubmissionPath() {
         val activity = inst.startActivitySync(Intent().setClassName(inst.targetContext, MainActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) as MainActivity
         lateinit var vm: AppViewModel
@@ -152,8 +232,19 @@ class ReplyFlowInstrumentedTest {
                     inst.runOnMainSync {
                         vm.store.put("position", "42", JSONObject().put("page", 1).put("index", 0).put("offset", 0))
                         vm.back()
+                        vm.navigate(Route("thread", "42"), root = true)
                     }
                     eventually { !vm.loading && vm.data.posts.isNotEmpty() }
+                }
+                lateinit var originalData: ScreenData
+                lateinit var originalScroll: androidx.compose.foundation.lazy.LazyListState
+                var originalPage = 0
+                var originalIndex = 0
+                var originalOffset = 0
+                inst.runOnMainSync {
+                    originalData = vm.data; originalPage = vm.page
+                    originalScroll = vm.readerListState(0, 0)
+                    originalIndex = originalScroll.firstVisibleItemIndex; originalOffset = originalScroll.firstVisibleItemScrollOffset
                 }
                 click { it.viewIdResourceName == "post-comment-$id" }
                 eventually { vm.route.kind == "compose" }
@@ -167,7 +258,16 @@ class ReplyFlowInstrumentedTest {
                 assertTrue(editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, body) }))
                 click { it.text?.toString() == "发送" }
                 click { it.text?.toString() == "确认发送" }
-                eventually { !vm.submitting && vm.route.kind == "thread" && vm.data.posts.any { p -> TiebaEmoticon.summary(p.blocks).contains(body) } }
+                eventually { !vm.submitting && vm.route.kind == if (id == "500") "subposts" else "thread" }
+                inst.runOnMainSync {
+                    assertSame("Successful replies retain the original loaded reader", originalData, vm.data)
+                    assertEquals(originalPage, vm.page)
+                    assertSame("Return keeps the exact scroll state before debounce", originalScroll, vm.readerListState(0, 0))
+                    assertEquals(originalIndex, originalScroll.firstVisibleItemIndex)
+                    assertEquals(originalOffset, originalScroll.firstVisibleItemScrollOffset)
+                    vm.navigate(Route("thread", "42"), root = true)
+                }
+                eventually { !vm.loading && vm.data.posts.any { p -> TiebaEmoticon.summary(p.blocks).contains(body) } }
                 assertEquals(index + 1, writes.size)
                 assertEquals(target.getString("pid"), writes.last()["pid"])
                 assertEquals(if (id == "500") "500" else null, writes.last()["lzl_id"])

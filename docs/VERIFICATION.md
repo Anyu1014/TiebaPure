@@ -6,7 +6,7 @@
 
 | 检查 | 结果 | 证据（工程根目录下） |
 | --- | --- | --- |
-| 共享配置Node测试 | 2/2通过 | `scripts/config.test.mjs`；本次执行输出 |
+| 共享配置Node测试 | 2/2通过 | `tool/tiebapure/config.test.mjs`；本次执行输出 |
 | iOS原始工程Debug无签名编译 | 通过 | `logs/ios-baseline.log` |
 | iOS最终名称/白角图标Release归档 | ARCHIVE SUCCEEDED | `logs/ios-final-release.log` |
 | iOS主应用+测试+UI测试目标编译 | TEST BUILD SUCCEEDED，仅编译 | `logs/ios-tests-compile.log` |
@@ -18,7 +18,7 @@
 | Android Debug检查轮安装/冷启动 | 通过；该轮冷启动1020ms | `logs/android-final-launch.log`、`logs/android-final-home.*` |
 | Android正文保存与断网重开 | 成功提示；无活动网络时可显示正文 | `logs/android-final-save.xml`、`logs/android-final-offline.*`、`logs/android-final-offline-connectivity.txt`（Active default network:none） |
 | Android最终Release安装/冷启动/真实帖子 | 通过，冷启动306ms；旅行吧→集中帖实际显示 | `logs/android-release-install.log`、`logs/android-release-launch.log`、`logs/android-release-thread.*` |
-| Android安装包身份 | ID dev.anyu.tiebalite，version1.4.15/build59，min26/target36，Release无DEBUGGABLE flag | `logs/android-release-manifest.xml`、`logs/android-release-installed-package.txt` |
+| Android安装包身份 | ID dev.anyu.tiebapure，version1.4.15/build59，min26/target36，Release无DEBUGGABLE flag | `logs/android-release-manifest.xml`、`logs/android-release-installed-package.txt` |
 | 包内许可 | APK全部许可assets与源码字节一致；IPA GPL/SwiftProtobuf正文一致 | 最终包内容核对；`docs/ANDROID_NOTICE_INVENTORY.json` |
 | 原始源仓库保护 | HEAD仍为固定上游提交，工作树无改动 | `original-source/`只读；git status检查 |
 
@@ -28,13 +28,13 @@
 
 | 文件 | SHA-256 |
 | --- | --- |
-| `releases/android/TiebaLite-1.4.15-release.apk` | `eb4b584ecfef845f0639c73729a961d9b9432303e446d19b359ba7e67ab6186e` |
-| `releases/android/TiebaLite-1.4.15-debug.apk` | `6eccb7fca55687b41177882ae900be1cf4c2dade3537283c57b7a0edf8311d23` |
-| `releases/ios/TiebaLite-1.4.15-unsigned.ipa` | `aa5b9121ce47d0e87c18c7b45df6292bcc916a8e939f1d330b23a4d4986486da` |
+| `releases/android/TiebaPure-1.4.15-release.apk` | `eb4b584ecfef845f0639c73729a961d9b9432303e446d19b359ba7e67ab6186e` |
+| `releases/android/TiebaPure-1.4.15-debug.apk` | `6eccb7fca55687b41177882ae900be1cf4c2dade3537283c57b7a0edf8311d23` |
+| `releases/ios/TiebaPure-1.4.15-unsigned.ipa` | `aa5b9121ce47d0e87c18c7b45df6292bcc916a8e939f1d330b23a4d4986486da` |
 
 Android Release通过APK Signature Scheme v2；本地新建RSA3072密钥，证书SHA-256 `f5fa134f311e1625b45a13273119fbc61703cc846ab4b0d40bdf9a3c78e065f1`。Debug为测试密钥，与Release不同。签名核对不等同所有运行行为验收。
 
-IPA通过ZIP完整性检查，主应用`dev.anyu.tiebalite`、扩展`dev.anyu.tiebalite.open-in`、显示名称TiebaLite/用TiebaLite打开、版本/build、Scheme均核对一致；没有embedded.mobileprovision。它是未签名的真实Release归档，不能直接安装。本机无匹配描述文件。
+IPA通过ZIP完整性检查，主应用`dev.anyu.tiebapure`、扩展`dev.anyu.tiebapure.open-in`、显示名称TiebaPure/用TiebaPure打开、版本/build、Scheme均核对一致；没有embedded.mobileprovision。它是未签名的真实Release归档，不能直接安装。本机无匹配描述文件。
 
 最后一次包装改为先创建全新ZIP并校验后替换输出，避免旧IPA中残留已删除文件；增量归档和新包检查通过，见 `logs/ios-final-package.log`。源码包只收录Git跟踪的工程、协议、资源和文档，不包含只读原始Git克隆、日志/缓存、生成包或私钥；双端当前完整源码均已包含。
 

@@ -121,6 +121,10 @@ struct ForumThreadsView: View {
         .task(id: account?.sessionIdentity) {
             await loadForumMembership()
         }
+        .onReceive(environment.threadCountersState.didChange) { change in
+            guard change.session == account?.sessionIdentity else { return }
+            threads = threads.map { change.counters.applying(to: $0) }
+        }
         .onChange(of: account?.sessionIdentity) { _ in
             cancelSubmissionNavigation()
             requestGeneration += 1
@@ -631,7 +635,7 @@ struct ForumThreadsView: View {
                   requestKey == activeRequestKey,
                   requestedSession == account?.sessionIdentity,
                   requestKey.category == selectedCategory else { return }
-            let visibleNext = next.filter(TiebaContentFilter.shouldKeep(thread:))
+            let visibleNext = environment.threadCountersState.reconciled(next.filter(TiebaContentFilter.shouldKeep(thread:)), session: requestedSession)
             if requestedPage == 1 {
                 threads = visibleNext
             } else {

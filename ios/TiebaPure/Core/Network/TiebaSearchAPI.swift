@@ -66,6 +66,15 @@ extension TiebaAPI {
         )
     }
 
+    func searchUsers(keyword: String, account: Account?) async throws -> [UserSummary] {
+        let word = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty, word.count <= 500 else { return [] }
+        if word.allSatisfy({ $0.isASCII && $0.isNumber }) { return [try await userByTiebaID(word, account: account)] }
+        let response = try await client.getJSON(.searchUser, queryItems: [.init(name: "word", value: word), .init(name: "_client_version", value: "8.0.8.0"), .init(name: "cuid_gid", value: "")], headers: ["User-Agent": "bdtb for Android 8.0.8.0"], as: SearchUserResponseDTO.self)
+        try TiebaResponseValidator.validate(code: response.errorCode, message: response.errorMessage)
+        var seen = Set<Int64>()
+        return (response.data.exactMatch + response.data.fuzzyMatch).filter { $0.id > 0 && seen.insert($0.id).inserted }.map(\.summary)
+    }
     func resolveUser(named name: String) async throws -> UserSummary {
         let reference = TiebaUserName.referenceText(name)
         let normalizedReference = TiebaUserName.normalized(reference)

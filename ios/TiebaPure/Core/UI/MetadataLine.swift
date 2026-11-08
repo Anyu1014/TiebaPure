@@ -27,29 +27,32 @@ enum ReaderDateText {
         return formatted(date, pattern: "yyyy-MM-dd", calendar: calendar)
     }
 
+    static func privateConversationString(from date: Date, now: Date = Date(), timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = 2
+        if calendar.isDate(date, inSameDayAs: now) {
+            return formatted(date, pattern: "HH:mm", calendar: calendar)
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "昨天 \(formatted(date, pattern: "HH:mm", calendar: calendar))"
+        }
+        if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
+            return formatted(date, pattern: "EEEE", calendar: calendar)
+        }
+        return formatted(date, pattern: "M月d日", calendar: calendar)
+    }
+
     static func threadMetadataString(
         from date: Date,
         now: Date = Date(),
         calendar: Calendar = .current,
         format: ThreadMetadataFormat = .compact
     ) -> String {
-        if format != .compact {
-            var gregorian = Calendar(identifier: .gregorian)
-            gregorian.timeZone = calendar.timeZone
-            return formatted(date, pattern: format == .mainPost ? "HH:mm:ss'「'yyyy-MM-dd'」'" : "HH:mm'「'MM-dd'」'", calendar: gregorian, localeIdentifier: "en_US_POSIX")
-        }
-        let elapsed = max(now.timeIntervalSince(date), 0)
-        if elapsed < 3_600 || calendar.isDate(date, inSameDayAs: now) {
-            return string(from: date, now: now, calendar: calendar)
-        }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-           calendar.isDate(date, inSameDayAs: yesterday) {
-            return "昨天 \(formatted(date, pattern: "HH:mm", calendar: calendar))"
-        }
-        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            return formatted(date, pattern: "MM-dd", calendar: calendar)
-        }
-        return formatted(date, pattern: "yyyy-MM-dd", calendar: calendar)
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        return formatted(date, pattern: "HH:mm:ss'「'MM-dd'」'", calendar: gregorian, localeIdentifier: "en_US_POSIX")
     }
 
     private static let formatterCacheLock = NSLock()

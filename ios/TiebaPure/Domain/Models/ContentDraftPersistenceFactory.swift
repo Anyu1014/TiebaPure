@@ -183,6 +183,19 @@ enum ContentDraftPersistenceFactory {
         }
     }
 
+    static func confirmsMissingDraft(accountID: String, target: ContentSubmissionTarget) async -> Bool {
+        do {
+            let location = try SecurePersistenceLocation.applicationSupport()
+            let files = try FileContentDraftPersistenceBackend(directoryURL: location.directoryURL)
+            guard await files.loadAsync(accountID: accountID, target: target) == .loaded(nil) else { return false }
+            if #available(iOS 17.0, *) {
+                let native = SwiftDataContentDraftPersistenceBackend(modelContainer: AppModelContainer.shared)
+                return await native.loadAsync(accountID: accountID, target: target) == .loaded(nil)
+            }
+            return true
+        } catch { return false }
+    }
+
     static func makeStateFile(
         directoryURL: URL,
         fileManager: FileManager = .default

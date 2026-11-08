@@ -9,12 +9,17 @@ final class AppEnvironment: ObservableObject {
     let sessionExpirationMonitor: SessionExpirationMonitor
     let socialRelationshipState: SocialRelationshipState
     let socialMutationCoordinator: SocialMutationCoordinator
+    let threadCountersState = ThreadCountersState()
     let ownThreadMutationState: OwnThreadMutationState
+    lazy var messageUnread = MessageUnreadState()
+    lazy var privateMessageClient = PrivateMessageClient()
+    let inlineReplyDrafts = InlineReplyDraftCache()
     let contentDraftStore: ContentDraftStore
     let contentSubmissionSettingsStore: ContentSubmissionSettingsStore
     let contentSubmissionCoordinator: ContentSubmissionCoordinator
     let forumSignSettingsStore: ForumSignSettingsStore
     let forumSignCoordinator: ForumSignCoordinator
+    lazy var autoReplyCoordinator = AutoReplyCoordinator(accounts: accountStore, api: api, submissions: contentSubmissionCoordinator, settings: contentSubmissionSettingsStore)
 
     init(
         accountStore: AccountStore,
@@ -363,7 +368,7 @@ final class AppEnvironment: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("UITEST_RESET_CONTENT_SUBMISSION") {
             _ = draftStore.clear(accountID: FixtureTiebaAPI.account.id)
         }
-        return AppEnvironment(
+        let fixture = AppEnvironment(
             accountStore: store,
             api: api,
             logoutCoordinator: LogoutCoordinator(
@@ -401,6 +406,22 @@ final class AppEnvironment: ObservableObject {
             forumSignSettingsStore: forumSignSettingsStore,
             forumSignCoordinator: forumSignCoordinator
         )
+        let privateClient = PrivateMessageClient(directory: nil)
+        privateClient.officialPull = { account, _ in
+            var message = Tiebapure_Official_ChatMessage()
+            message.id = 1
+            message.fromUid = 84
+            message.toUid = Int64(account.uid) ?? 0
+            message.type = 1
+            message.content = "合成私信"
+            var response = Tiebapure_Official_PullResponse()
+            response.error.code = 0
+            response.data.personal.messages = [message]
+            return OfficialPrivateSnapshot(groups: [], response: response)
+        }
+        fixture.messageUnread = MessageUnreadState(defaults: nil)
+        fixture.privateMessageClient = privateClient
+        return fixture
     }
 #endif
 }

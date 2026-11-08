@@ -18,7 +18,9 @@ protocol TiebaAPIService {
         forumName: String?,
         pageSize: Int
     ) async throws -> SearchResultsPage
+    func searchUsers(keyword: String, account: Account?) async throws -> [UserSummary]
     func resolveUser(named name: String) async throws -> UserSummary
+    func userByTiebaID(_ id: String, account: Account?) async throws -> UserSummary
     func threadPage(
         account: Account?,
         threadID: Int64,
@@ -51,6 +53,7 @@ protocol TiebaAPIService {
     func forumMembership(account: Account, forum: Forum) async throws -> ForumMembership
     func setForumFollowed(account: Account, forum: Forum, followed: Bool) async throws -> ForumMembership
     func signForum(account: Account, forum: Forum) async throws -> ForumSignResult
+    func accountLikes(account: Account, page: Int, filter: AccountLikesFilter) async throws -> AccountLikedContentPage
     func accountThreadFavorites(account: Account, page: Int) async throws -> AccountThreadFavoritesPage
     func setAccountThreadFavorite(
         account: Account,
@@ -73,10 +76,17 @@ protocol TiebaAPIService {
 }
 
 extension TiebaAPIService {
+    func userByTiebaID(_ id: String, account: Account?) async throws -> UserSummary {
+        throw UserProfileMutationError.unsupportedByService
+    }
     /// Same shape as the other optional write operations: services that do not
     /// implement check-in (test doubles, offline stubs) reject it rather than
     /// having to carry a stub.
     func signForum(account: Account, forum: Forum) async throws -> ForumSignResult {
+        throw UserProfileMutationError.unsupportedByService
+    }
+
+    func accountLikes(account: Account, page: Int, filter: AccountLikesFilter) async throws -> AccountLikedContentPage {
         throw UserProfileMutationError.unsupportedByService
     }
 
@@ -183,3 +193,7 @@ extension TiebaAPIService {
 }
 
 extension TiebaAPI: TiebaAPIService {}
+
+extension TiebaAPIService {
+    func searchUsers(keyword: String, account: Account?) async throws -> [UserSummary] { [try await resolveUser(named: keyword)] }
+}

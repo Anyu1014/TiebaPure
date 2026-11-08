@@ -609,6 +609,18 @@ struct FixtureTiebaAPI: TiebaAPIService {
         )
     }
 
+    func accountLikes(account: Account, page: Int, filter: AccountLikesFilter) async throws -> AccountLikedContentPage {
+        try await prepare(page: page)
+        guard scenario != .empty, page == 1 else { return AccountLikedContentPage(items: [], currentPage: page, hasMore: false) }
+        let thread = Self.threads[0]
+        let entries = [
+            AccountLikedContent(threadID: thread.id, forumID: thread.forumID, forumName: thread.forumName ?? "", title: thread.title, authorDisplayName: thread.author.displayNameResolved, blocks: thread.blocks, postID: nil, parentPostID: nil),
+            AccountLikedContent(threadID: thread.id, forumID: thread.forumID, forumName: thread.forumName ?? "", title: thread.title, authorDisplayName: thread.author.displayNameResolved, blocks: [.text("合成点赞回复")], postID: 2002, parentPostID: nil),
+            AccountLikedContent(threadID: thread.id, forumID: thread.forumID, forumName: thread.forumName ?? "", title: thread.title, authorDisplayName: thread.author.displayNameResolved, blocks: [.text("合成点赞楼中楼")], postID: 3001, parentPostID: 2002)
+        ].filter { filter == .all || ($0.postID == nil ? filter == .threads : filter == .replies) }
+        return AccountLikedContentPage(items: entries, currentPage: page, hasMore: false)
+    }
+
     func accountThreadFavorites(account: Account, page: Int) async throws -> AccountThreadFavoritesPage {
         try await prepare(page: page)
         guard scenario != .empty, page == 1 else {
@@ -670,7 +682,7 @@ struct FixtureTiebaAPI: TiebaAPIService {
             return MessagesPage(items: [], currentPage: page, hasMore: false)
         }
         let items = kind == .reply ? Self.replyMessages : Self.atMessages
-        return MessagesPage(items: items, currentPage: page, hasMore: false)
+        return MessagesPage(items: items, currentPage: page, hasMore: false, unreadCount: items.count)
     }
 
     func setPostLiked(

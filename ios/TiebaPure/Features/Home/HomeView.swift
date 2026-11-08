@@ -53,7 +53,7 @@ struct HomeView: View {
                     }
             }
         )
-        .floatingRootTabBar(isVisible: showsFloatingTabBar)
+        .floatingRootTabBar(tab: .home, isVisible: showsFloatingTabBar)
         .onChange(of: horizontalSizeClass) { sizeClass in
             foldNavigationForSizeClassChange(to: sizeClass)
         }
@@ -175,6 +175,10 @@ struct HomeView: View {
         .task {
             guard didLoad == false else { return }
             await reload()
+        }
+        .onReceive(environment.threadCountersState.didChange) { change in
+            guard change.session == account?.sessionIdentity else { return }
+            threads = threads.map { change.counters.applying(to: $0) }
         }
         .onChange(of: account?.sessionIdentity) { _ in
             cancelHomeLikeTasks()
@@ -524,6 +528,7 @@ struct HomeView: View {
         threads[index].isLiked = liked
         let delta = liked ? 1 : -1
         threads[index].likeCount = max(threads[index].likeCount + delta, 0)
+        environment.threadCountersState.record(threads[index], session: account?.sessionIdentity)
     }
 
     private func finishHomeLikeOperation(threadID: Int64, operationID: UUID) {
@@ -616,7 +621,7 @@ struct HomeView: View {
             let next = try await task.value
             guard generation == requestGeneration,
                   requestedSession == account?.sessionIdentity else { return }
-            let visibleNext = next.filter(TiebaContentFilter.shouldKeep(thread:))
+            let visibleNext = environment.threadCountersState.reconciled(next.filter(TiebaContentFilter.shouldKeep(thread:)), session: requestedSession)
             if requestedPage == 1 {
                 threads = HomeFeedMerge.refresh(existing: threads, incoming: visibleNext)
             } else {

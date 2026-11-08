@@ -1,6 +1,6 @@
 # 第三方依赖与版权材料
 
-TiebaLite Android：本衍生项目采用 GPL-3.0-only。以下依赖节点的许可标注来自已解析版本的 POM；BOM/多平台元数据节点不等于打包代码。
+TiebaPure Android：本衍生项目采用 GPL-3.0-only。以下依赖节点的许可标注来自已解析版本的 POM；BOM/多平台元数据节点不等于打包代码。
 
 - androidx.activity:activity:1.11.0 — Apache-2.0
 - androidx.activity:activity-compose:1.11.0 — Apache-2.0

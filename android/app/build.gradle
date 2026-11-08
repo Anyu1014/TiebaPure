@@ -27,14 +27,14 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
-    def signingStore = System.getenv('TIEBALITE_KEYSTORE')
-    def signingPasswordFile = System.getenv('TIEBALITE_KEY_PASSWORD_FILE')
+    def signingStore = System.getenv('TIEBAPURE_KEYSTORE')
+    def signingPasswordFile = System.getenv('TIEBAPURE_KEY_PASSWORD_FILE')
     if (signingStore && signingPasswordFile) {
         signingConfigs {
             localRelease {
                 storeFile file(signingStore)
                 storePassword new File(signingPasswordFile).text.trim()
-                keyAlias 'tiebalite'
+                keyAlias 'tiebapure'
                 keyPassword storePassword
             }
         }

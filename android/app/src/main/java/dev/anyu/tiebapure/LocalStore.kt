@@ -171,6 +171,6 @@ class LocalStore(private val context: Context, namespace: String = "") : SQLiteO
     }
     companion object {
         val backupKinds = setOf("history", "position", "saved", "block", "forum")
-        val kinds = backupKinds + "draft"
+        val kinds = backupKinds + setOf("draft", "automation")
     }
 }

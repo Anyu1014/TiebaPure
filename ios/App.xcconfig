@@ -1,6 +1,6 @@
-// Generated from ../app-config.json by scripts/sync-config.mjs
-APP_DISPLAY_NAME = TiebaLite
-APP_IDENTIFIER = dev.anyu.tiebalite
-APP_VERSION = 1.1
-APP_BUILD = 67
-APP_URL_SCHEME = tiebalite
+// Generated from ../app-config.json by tool/tiebapure/sync-config.mjs
+APP_DISPLAY_NAME = TiebaPure
+APP_IDENTIFIER = dev.anyu.tiebapure
+APP_VERSION = 2.3
+APP_BUILD = 87
+APP_URL_SCHEME = tiebapure

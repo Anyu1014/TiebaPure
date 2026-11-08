@@ -205,6 +205,15 @@ final class SearchAPITests: XCTestCase {
         }
     }
 
+    func testAnonymousForumThreadsReadsNestedAndLegacyLikes() async throws {
+        let api = makeAPI { _ in
+            #"{"error_code":0,"thread_list":[{"id":"42","title":"nested","reply_num":"103","agree":{"agree_num":"394"}},{"id":"43","title":"legacy","agree_num":9},{"id":"44","title":"zero","agree_num":9,"agree":{"agree_num":0}}],"user_list":[]}"#.data(using: .utf8)!
+        }
+        let threads = try await api.forumThreads(account: nil, forumName: "fixture", page: 1)
+        XCTAssertEqual(threads.map(\.likeCount), [394, 9, 0])
+        XCTAssertEqual(threads.first?.replyCount, 103)
+    }
+
     func testAnonymousForumThreadsMapsVoiceInfoFromObjectAndArray() async throws {
         let api = makeAPI { _ in
             """

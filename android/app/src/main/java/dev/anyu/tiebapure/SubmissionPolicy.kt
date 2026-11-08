@@ -9,6 +9,12 @@ class SubmissionRejected(message: String) : IOException(message.take(240))
 class SessionExpired : IOException("登录已失效，请重新登录")
 
 object SubmissionPolicy {
+    fun threadContent(text: String, imageIds: List<String>): String {
+        if (imageIds.isEmpty()) return text
+        require(imageIds.size <= 9 && imageIds.all { it.matches(Regex("[A-Za-z0-9_-]{1,2048}")) }) { "图片上传标识无效" }
+        val escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\r\n", "\n").replace("\n", "<br>")
+        return (listOf(escaped).filter(String::isNotEmpty) + imageIds.map { "<img class=\"BDE_Image\" src=\"https://tiebapic.baidu.com/forum/pic/item/$it.jpg\">" }).joinToString("<br>")
+    }
     fun clientStatus(j: JSONObject) {
         val roots = listOfNotNull(j, j.optJSONObject("data"), j.optJSONObject("error"))
         val values = roots.flatMap { obj -> listOf("error_code", "err_code", "errno", "error_no", "no").filter(obj::has).map { strictInt(obj.opt(it)) ?: throw IOException("接口状态格式无效") } }

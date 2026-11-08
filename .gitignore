@@ -2,7 +2,7 @@ original-source/
 .build/
 logs/
 /releases/
-/lastest/
+/latest/
 /archives/
 ios/build/
 ios/DerivedData/
@@ -22,3 +22,15 @@ ios/DerivedData/
 *.pem
 *.key
 *.pfx
+
+# 签名材料不进版本库（本机 src/signing 保留）
+/signing/
+
+/.cache/
+
+# 截图/预览页属于可删产物，统一放项目根 .cache/
+/previews/
+
+# 本地运行状态与 Kotlin 会话缓存
+/.local/
+/android/.kotlin/

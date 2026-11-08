@@ -35,7 +35,7 @@ struct ForumHubView: View {
             },
             listColumn: { hubColumn }
         )
-        .floatingRootTabBar(isVisible: showsFloatingTabBar)
+        .floatingRootTabBar(tab: .forums, isVisible: showsFloatingTabBar)
         .onChange(of: horizontalSizeClass) { sizeClass in
             bridgeDetailForSizeClassChange(to: sizeClass)
         }

@@ -28,6 +28,34 @@ import java.util.UUID
 class AvatarRenderingInstrumentedTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
     private lateinit var activity: MainActivity
+    @Test fun forumRowsOpenAuthorsWhileHomeRowsKeepTheirForumIdentity() {
+        activity = inst.startActivitySync(Intent().setClassName(inst.targetContext, MainActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        var usersOpened = 0; var forumsOpened = 0
+        val thread = Thread("fixture", "合成帖子", "示例", User("42", "作者甲"), timestamp = System.currentTimeMillis() / 1000,
+            forumAvatar = "https://himg.bdimg.com/forum-header-fixture-not-found.png")
+        inst.runOnMainSync {
+            val vm = ViewModelProvider(activity)[AppViewModel::class.java]
+            activity.setContent { MaterialTheme { Column(Modifier.fillMaxSize().padding(16.dp)) {
+                ThreadRow(vm, thread, 17f, false, forumCategory = "", onForum = { forumsOpened++ }, onUser = { usersOpened++ }) {}
+                ThreadRow(vm, thread, 17f, false, homeFeed = true, onForum = { forumsOpened++ }, onUser = { usersOpened++ }) {}
+            } } }
+        }
+        fun visible() = nodes(inst.uiAutomation.rootInActiveWindow)
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (visible().none { it.text?.toString() == "作者甲" } && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
+        assertTrue(visible().any { it.text?.toString() == "作者甲" })
+        assertTrue(visible().any { it.text?.toString()?.contains("刚刚回复") == true })
+        assertTrue(visible().any { it.text?.toString() == "示例吧" })
+        fun clickText(text: String) {
+            var node = visible().first { it.text?.toString() == text }
+            while (!node.isClickable && node.parent != null) node = node.parent
+            assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            inst.waitForIdleSync()
+        }
+        clickText("作者甲"); assertEquals(1, usersOpened); assertEquals(0, forumsOpened)
+        clickText("作"); assertEquals(2, usersOpened); assertEquals(0, forumsOpened)
+        clickText("示例吧"); assertEquals(2, usersOpened); assertEquals(1, forumsOpened)
+    }
     private fun nodes(node: AccessibilityNodeInfo?): List<AccessibilityNodeInfo> = if (node == null) emptyList() else listOf(node) + (0 until node.childCount).flatMap { nodes(node.getChild(it)) }
     @After fun restoreApp() {
         if (::activity.isInitialized) { inst.runOnMainSync { activity.recreate() }; inst.waitForIdleSync() }

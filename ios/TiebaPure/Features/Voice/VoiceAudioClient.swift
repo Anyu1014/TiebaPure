@@ -19,8 +19,20 @@ enum VoiceAudioURLPolicy {
         return value.lowercased()
     }
 
+    // Private voice receipts can append a server suffix to the file hash.
+    static func normalizedVoiceID(_ value: String) -> String? {
+        if let hash = normalizedMD5(value) { return hash }
+        guard (34...128).contains(value.utf8.count),
+              let separator = value.firstIndex(of: "_"),
+              normalizedMD5(String(value[..<separator])) != nil,
+              value[value.index(after: separator)...].utf8.allSatisfy({
+                  (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95
+              }) else { return nil }
+        return value
+    }
+
     static func url(forMD5 value: String) -> URL? {
-        guard let md5 = normalizedMD5(value) else { return nil }
+        guard let md5 = normalizedVoiceID(value) else { return nil }
         var components = URLComponents()
         components.scheme = "https"
         components.host = host

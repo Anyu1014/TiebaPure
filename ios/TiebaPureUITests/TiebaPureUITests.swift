@@ -7,16 +7,21 @@ final class TiebaPureUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testFloatingRootBarOverlaysFeedThroughScreenBottom() {
+
+    func testRootBarOverlaysFeedThroughScreenBottom() {
         let app = launchApp()
         let feed = app.scrollViews["home-feed-scroll-view"]
-        let customBar = app.descendants(matching: .any)["floating-root-tab-bar"]
-        let bar = app.tabBars.firstMatch.waitForExistence(timeout: 2) ? app.tabBars.firstMatch : customBar
         XCTAssertTrue(feed.waitForExistence(timeout: 20))
+        let bar = rootBar(in: app)
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
-        XCTAssertEqual(feed.frame.maxY, app.frame.maxY, accuracy: 2,
-                       "Feed viewport must extend below the floating capsule to the screen edge")
-        XCTAssertGreaterThan(feed.frame.maxY, bar.frame.maxY)
+        if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+            XCTAssertEqual(bar.elementType, .tabBar)
+        } else if bar.identifier == "floating-root-tab-bar" {
+            XCTAssertEqual(bar.frame.height, 62, accuracy: 2)
+            XCTAssertEqual(bar.frame.width, min(280, app.frame.width - 40), accuracy: 2)
+        }
+        XCTAssertEqual(feed.frame.maxY, app.frame.maxY, accuracy: 2)
+        XCTAssertGreaterThan(feed.frame.maxY, rootTab("首页", in: app).frame.midY)
         XCTAssertTrue(rootTab("首页", in: app).isSelected)
         rootTab("进吧", in: app).tap()
         XCTAssertTrue(app.navigationBars["进吧"].waitForExistence(timeout: 5))
@@ -24,15 +29,94 @@ final class TiebaPureUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["我的"].waitForExistence(timeout: 5))
     }
 
-    func testNativeLiquidGlassBarSupportsDraggingSelection() throws {
+    func testFloatingTabBarReturnsAfterThreadAndPrivateMessages() {
+        let app = launchApp(account: "loggedIn")
+        XCTAssertTrue(rootTab("首页", in: app).waitForExistence(timeout: 8))
+        let bar = rootBar(in: app)
+        let thread = threadRows(in: app).firstMatch
+        XCTAssertTrue(thread.waitForExistence(timeout: 15))
+        thread.tap()
+        XCTAssertTrue(app.scrollViews["thread-detail-scroll-view"].waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForHittable(bar, expected: false, timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(waitForHittable(bar, expected: true, timeout: 5))
+        rootTab("我的", in: app).tap()
+        let messagesEntry = app.buttons["me-messages-entry"]
+        XCTAssertTrue(messagesEntry.waitForExistence(timeout: 8))
+        messagesEntry.tap()
+        let privateSegment = app.segmentedControls.buttons["私信"]
+        XCTAssertTrue(privateSegment.waitForExistence(timeout: 8))
+        privateSegment.tap()
+        XCTAssertTrue(waitForHittable(bar, expected: false, timeout: 5))
+        app.segmentedControls.buttons["回复我的"].tap()
+        XCTAssertTrue(waitForHittable(bar, expected: true, timeout: 5))
+        XCTAssertTrue(bar.exists)
+    }
+
+    func testFloatingTabsRetainAvatarPositionHeightAndSpeedRules() {
+        for position in ["left", "center", "right"] {
+            let key = "-dev.infinityf4p.tiebapure.appearance"
+            let app = launchApp(account: "loggedIn", additionalArguments: [
+                key + ".tab-position", position, key + ".tab-labels", "NO", key + ".tab-auto-collapse", "YES"
+            ], resetAppearance: false)
+            XCTAssertTrue(rootTab("首页", in: app).waitForExistence(timeout: 8), "Hidden visual titles retain accessible names")
+            let bar = rootBar(in: app)
+            XCTAssertTrue(bar.exists)
+            let expandedFrame = bar.frame
+            if #available(iOS 26.0, *), UIDevice.current.userInterfaceIdiom == .phone {
+                XCTAssertEqual(bar.elementType, .tabBar)
+            }
+            let feed = app.scrollViews["home-feed-scroll-view"]
+            XCTAssertTrue(feed.waitForExistence(timeout: 8))
+            let feedFrame = feed.frame
+            feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).press(
+                forDuration: 0.05, thenDragTo: feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)),
+                withVelocity: 400, thenHoldForDuration: 0.1)
+            let avatar = app.buttons["collapsed-root-tab-avatar"]
+            XCTAssertTrue(avatar.waitForExistence(timeout: 5))
+            XCTAssertEqual(feed.frame, feedFrame, "Collapsing must preserve the feed viewport")
+            XCTAssertEqual(avatar.frame.height, 62, accuracy: 2)
+            let expectedX = position == "left" ? app.frame.minX + 51 : position == "right" ? app.frame.maxX - 51 : app.frame.midX
+            XCTAssertEqual(avatar.frame.midX, expectedX, accuracy: 3)
+            feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).press(
+                forDuration: 0.05, thenDragTo: feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)),
+                withVelocity: 120, thenHoldForDuration: 0.1)
+            XCTAssertTrue(avatar.exists, "Slow downward travel must retain the avatar")
+            feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(
+                forDuration: 0.05, thenDragTo: feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)),
+                withVelocity: 1800, thenHoldForDuration: 0.1)
+            XCTAssertTrue(rootTab("首页", in: app).waitForExistence(timeout: 5), "Fast downward travel expands the tabs")
+            XCTAssertEqual(bar.frame, expandedFrame, "Returning from the avatar must restore the bar size")
+            feed.swipeUp()
+            XCTAssertTrue(avatar.waitForExistence(timeout: 5))
+            avatar.tap()
+            XCTAssertTrue(rootTab("首页", in: app).waitForExistence(timeout: 5))
+            XCTAssertTrue(rootTab("首页", in: app).isSelected, "Tapping the avatar only expands the current tab")
+            app.terminate()
+        }
+    }
+
+    func testFloatingTabSettingsRemainAvailable() {
         let app = launchApp()
-        let bar = app.tabBars.firstMatch
-        guard bar.waitForExistence(timeout: 5) else { throw XCTSkip("Native liquid glass requires iOS 26 or later") }
-        let home = rootTab("首页", in: app)
-        let me = rootTab("我的", in: app)
-        home.press(forDuration: 0.2, thenDragTo: me)
-        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: me)
-        waitForExpectations(timeout: 5)
+        rootTab("我的", in: app).tap()
+        let entry = app.descendants(matching: .any)["app-settings-entry"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        entry.tap()
+        let labels = app.switches["settings-bottom-bar-labels"]
+        XCTAssertTrue(labels.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-bottom-bar-position"].exists)
+        let bar = rootBar(in: app)
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let frame = bar.frame
+        labels.tap()
+        XCTAssertTrue(bar.exists, "Hiding labels keeps the same tab bar")
+        XCTAssertEqual(bar.frame, frame)
+        XCTAssertTrue(labels.exists, "Changing the style keeps Settings open")
+        for name in ["首页", "进吧", "我的"] {
+            rootTab(name, in: app).tap()
+            XCTAssertTrue(rootTab(name, in: app).isSelected)
+            XCTAssertEqual(bar.frame, frame)
+        }
     }
 
     func testLaunchShowsHomeWithoutLoginAndRootTabs() {
@@ -290,10 +374,25 @@ final class TiebaPureUITests: XCTestCase {
         XCTAssertTrue(avatar.exists)
         XCTAssertEqual(avatar.frame.width, 56, accuracy: 1)
         XCTAssertEqual(avatar.frame.height, 56, accuracy: 1)
+        let profileName = app.descendants(matching: .any)["user-profile-name"]
+        let identity = app.descendants(matching: .any)["user-profile-metadata"]
+        XCTAssertGreaterThanOrEqual(profileName.frame.minY, avatar.frame.minY - 1)
+        XCTAssertLessThan(profileName.frame.midY, avatar.frame.midY)
+        XCTAssertGreaterThan(identity.frame.midY, avatar.frame.midY)
+        XCTAssertLessThanOrEqual(identity.frame.maxY, avatar.frame.maxY + 1)
         let followButton = app.buttons["user-profile-follow-button"]
         XCTAssertTrue(followButton.exists)
         XCTAssertGreaterThanOrEqual(followButton.frame.width, 44)
         XCTAssertGreaterThanOrEqual(followButton.frame.height, 44)
+        let messageButton = app.buttons["user-profile-message-button"]
+        XCTAssertTrue(messageButton.exists)
+        XCTAssertLessThan(messageButton.frame.maxX, followButton.frame.minX)
+        XCTAssertEqual(messageButton.frame.midY, followButton.frame.midY, accuracy: 1)
+        let copyID = app.buttons["user-profile-copy-id"]
+        XCTAssertTrue(copyID.exists)
+        XCTAssertGreaterThanOrEqual(copyID.frame.height, 44)
+        copyID.tap()
+        XCTAssertEqual(copyID.label, "已复制用户ID")
 
         let agreeStat = app.descendants(matching: .any)["user-profile-agree-stat"]
         let followingStat = app.buttons["user-profile-following-stat"]
@@ -983,54 +1082,18 @@ final class TiebaPureUITests: XCTestCase {
         )
     }
 
-    func testLoggedInUserCanReplyToFloorAndReturnsToUpdatedSubpostList() {
-        let app = launchApp(
-            scenario: "subpostReference",
-            account: "loggedIn",
-            additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"]
-        )
+    func testLoggedInUserCanReplyToFloorAndKeepsTheCurrentReader() {
+        let app = launchApp(scenario: "subpostReference", account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"])
         openFirstThread(in: app)
-
-        XCTAssertTrue(
-            waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12)
-        )
-        app.buttons["thread-reply-button-2002"].tap()
-
-        let riskAlert = app.alerts["实验性发布功能"]
-        XCTAssertTrue(riskAlert.waitForExistence(timeout: 8))
-        riskAlert.buttons["了解并继续"].tap()
-
-        let body = "UI自动化楼层回复"
-        let bodyEditor = app.textViews["正文内容"]
-        XCTAssertTrue(bodyEditor.waitForExistence(timeout: 8))
-        bodyEditor.tap()
-        bodyEditor.typeText(body)
-
-        let sendButton = app.buttons["发送"]
-        XCTAssertTrue(waitForHittable(sendButton, expected: true, timeout: 5))
-        sendButton.tap()
-
-        XCTAssertTrue(
-            bodyEditor.waitForNonExistence(timeout: 10),
-            "发送成功后应关闭楼层回复编辑器"
-        )
-        XCTAssertTrue(
-            app.navigationBars.matching(
-                NSPredicate(format: "identifier BEGINSWITH %@", "2楼的回复")
-            ).firstMatch.waitForExistence(timeout: 10),
-            "发送成功后应回到当前帖子并打开对应楼中楼"
-        )
-        XCTAssertTrue(
-            app.descendants(matching: .any).matching(
-                NSPredicate(
-                    format: "identifier == %@ AND (label CONTAINS %@ OR value CONTAINS %@)",
-                    "thread-subpost-text",
-                    body,
-                    body
-                )
-            ).firstMatch.waitForExistence(timeout: 10),
-            "新回复应在更新后的楼中楼中可见"
-        )
+        XCTAssertTrue(waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12))
+        let floor = app.buttons["thread-reply-button-2002"]
+        floor.tap()
+        let reader = app.scrollViews["thread-detail-scroll-view"]
+        XCTAssertTrue(reader.exists)
+        sendInlineReply("UI自动化楼层回复", in: app)
+        XCTAssertTrue(reader.exists)
+        XCTAssertFalse(app.navigationBars["回复用户"].exists)
+        XCTAssertTrue(app.textViews["thread-reply-input"].exists)
     }
 
     func testOnlyMetadataReplyButtonsRemainAndOpenTheCorrectComposers() {
@@ -1041,16 +1104,13 @@ final class TiebaPureUITests: XCTestCase {
         XCTAssertTrue(waitForElement(named: "thread-reply-button-2001", in: app, maxSwipes: 12))
         XCTAssertTrue(main.isEnabled)
         main.tap()
-        let risk = app.alerts["实验性发布功能"]
-        XCTAssertTrue(risk.waitForExistence(timeout: 8))
-        risk.buttons["了解并继续"].tap()
         assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 合成内容作者", in: app)
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
 
         XCTAssertTrue(waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12))
         app.buttons["thread-reply-button-2002"].tap()
         assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 很长很长的合成回复用户名用于布局测试", in: app)
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
 
         XCTAssertTrue(waitForElement(named: "查看全部4条回复", in: app, maxSwipes: 12))
         app.buttons["查看全部4条回复"].tap()
@@ -1059,7 +1119,7 @@ final class TiebaPureUITests: XCTestCase {
         XCTAssertTrue(parent.waitForExistence(timeout: 8))
         parent.tap()
         assertReplyComposer(navigationTitle: "回复用户", prompt: "回复 很长很长的合成回复用户名用于布局测试", in: app)
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
 
         XCTAssertTrue(waitForElement(named: "subpost-reply-button-3051", in: app, maxSwipes: 8))
         XCTAssertFalse(app.buttons["thread-subpost-comment-button-3051"].exists)
@@ -1070,39 +1130,21 @@ final class TiebaPureUITests: XCTestCase {
     func testOwnCommentsCanBeDeletedWithConfirmation() {
         let app = launchApp(scenario: "subpostReference", account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"])
         openFirstThread(in: app)
-        let reply = app.buttons["thread-compose-reply-button"]
-        XCTAssertTrue(reply.waitForExistence(timeout: 8))
-        reply.tap()
-        let risk = app.alerts["实验性发布功能"]
-        XCTAssertTrue(risk.waitForExistence(timeout: 8))
-        risk.buttons["了解并继续"].tap()
-        let body = app.textViews["正文内容"]
-        XCTAssertTrue(body.waitForExistence(timeout: 8))
-        body.tap()
-        body.typeText("普通评论删除验证")
-        app.buttons["发送"].tap()
-        XCTAssertTrue(app.navigationBars["回复帖子"].waitForNonExistence(timeout: 10))
+        sendInlineReply("普通评论删除验证", in: app)
+        app.buttons["更多"].tap(); app.buttons["刷新"].tap()
         XCTAssertTrue(waitForElement(named: "delete-comment-19001", in: app, maxSwipes: 12))
         let delete = app.buttons["delete-comment-19001"]
-        delete.tap()
-        app.buttons["取消"].tap()
-        XCTAssertTrue(delete.exists)
-        delete.tap()
-        app.buttons["确认删除"].tap()
-        XCTAssertTrue(delete.waitForNonExistence(timeout: 8))
-
+        delete.tap(); app.buttons["取消"].tap(); XCTAssertTrue(delete.exists)
+        delete.tap(); app.buttons["确认删除"].tap(); XCTAssertTrue(delete.waitForNonExistence(timeout: 8))
         XCTAssertTrue(waitForElement(named: "thread-reply-button-2002", in: app, maxSwipes: 12))
         app.buttons["thread-reply-button-2002"].tap()
-        XCTAssertTrue(body.waitForExistence(timeout: 8))
-        body.tap()
-        body.typeText("楼中楼删除验证")
-        app.buttons["发送"].tap()
-        XCTAssertTrue(app.navigationBars["回复用户"].waitForNonExistence(timeout: 10))
+        sendInlineReply("楼中楼删除验证", in: app)
+        app.buttons["取消回复"].tap()
+        XCTAssertTrue(waitForElement(named: "查看全部4条回复", in: app, maxSwipes: 12))
+        app.buttons["查看全部4条回复"].tap()
         XCTAssertTrue(waitForElement(named: "delete-comment-19002", in: app, maxSwipes: 12))
-        let deleteSubpost = app.buttons["delete-comment-19002"]
-        deleteSubpost.tap()
-        app.buttons["确认删除"].tap()
-        XCTAssertTrue(deleteSubpost.waitForNonExistence(timeout: 8))
+        let child = app.buttons["delete-comment-19002"]
+        child.tap(); app.buttons["确认删除"].tap(); XCTAssertTrue(child.waitForNonExistence(timeout: 8))
     }
 
     func testReplySettingDefaultsOnAndExplicitDisablePersistsAcrossRelaunch() {
@@ -1196,22 +1238,16 @@ final class TiebaPureUITests: XCTestCase {
         assertLikeCountIsReadOnly(identifier: "thread-subpost-like-button-3051", in: app)
     }
 
-    func testEnabledReplySettingShowsHittableThreadEntry() {
-        let app = launchApp(
-            account: "loggedIn",
-            additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"]
-        )
+    func testEnabledReplySettingShowsAnInlineInput() {
+        let app = launchApp(account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION"])
         openFirstThread(in: app)
-
-        let replyEntry = app.buttons["thread-compose-reply-button"]
-        XCTAssertTrue(replyEntry.waitForExistence(timeout: 8))
-        XCTAssertTrue(waitForHittable(replyEntry, expected: true, timeout: 5))
-        replyEntry.tap()
-
-        let riskAlert = app.alerts["实验性发布功能"]
-        XCTAssertTrue(riskAlert.waitForExistence(timeout: 8))
-        riskAlert.buttons["了解并继续"].tap()
-        XCTAssertTrue(app.navigationBars["回复帖子"].waitForExistence(timeout: 8))
+        let input = app.textViews["thread-reply-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForHittable(input, expected: true, timeout: 5))
+        input.tap(); input.typeText("仅在帖子页编辑")
+        XCTAssertTrue((input.value as? String ?? "").contains("仅在帖子页编辑"))
+        XCTAssertTrue(app.scrollViews["thread-detail-scroll-view"].exists)
+        XCTAssertFalse(app.navigationBars["回复帖子"].exists)
     }
 
     func testPlainTextTapOpensCorrectMainFloorAndSubpostComposer() {
@@ -1226,15 +1262,12 @@ final class TiebaPureUITests: XCTestCase {
         XCTAssertTrue(mainText.waitForExistence(timeout: 8))
         mainText.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.18)).tap()
 
-        let riskAlert = app.alerts["实验性发布功能"]
-        XCTAssertTrue(riskAlert.waitForExistence(timeout: 8))
-        riskAlert.buttons["了解并继续"].tap()
         assertReplyComposer(
             navigationTitle: "回复用户",
             prompt: "回复 合成内容作者",
             in: app
         )
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
 
         let floorText = app.descendants(matching: .any).matching(identifier: "thread-reply-text")
             .matching(NSPredicate(
@@ -1250,7 +1283,7 @@ final class TiebaPureUITests: XCTestCase {
             prompt: "回复 很长很长的合成回复用户名用于布局测试",
             in: app
         )
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
 
         XCTAssertTrue(waitForElement(named: "查看全部4条回复", in: app, maxSwipes: 12))
         app.buttons["查看全部4条回复"].tap()
@@ -1271,7 +1304,7 @@ final class TiebaPureUITests: XCTestCase {
             prompt: "回复 合成内容作者",
             in: app
         )
-        app.navigationBars["回复用户"].buttons["取消"].tap()
+        app.buttons["取消回复"].tap()
         XCTAssertTrue(app.navigationBars["2楼的回复(4条)"].waitForExistence(timeout: 5))
     }
 
@@ -1387,20 +1420,19 @@ final class TiebaPureUITests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["thread-main-text"].waitForExistence(timeout: 30))
         }
 
+        let replyEditor = app.textViews["thread-reply-input"]
         if mode != "resumeSubpost" {
             let threadReply = environment["TIEBAPURE_LIVE_THREAD_REPLY"]
                 ?? "普通回帖测试 \(token)"
-            let threadReplyButton = app.buttons["thread-compose-reply-button"]
-            XCTAssertTrue(threadReplyButton.waitForExistence(timeout: 10))
-            threadReplyButton.tap()
-            XCTAssertTrue(bodyEditor.waitForExistence(timeout: 10))
-            bodyEditor.tap()
-            bodyEditor.typeText(threadReply)
-            let sendReply = app.navigationBars["回复帖子"].buttons["发送"]
+            XCTAssertTrue(replyEditor.waitForExistence(timeout: 10))
+            XCTAssertTrue(replyEditor.waitForExistence(timeout: 10))
+            replyEditor.tap()
+            replyEditor.typeText(threadReply)
+            let sendReply = app.buttons["thread-reply-send"]
             XCTAssertTrue(waitForHittable(sendReply, expected: true, timeout: 5))
             sendReply.tap()
             waitForLiveSubmissionToFinish(
-                editor: bodyEditor,
+                editor: replyEditor,
                 error: submissionError,
                 timeout: 30
             )
@@ -1408,7 +1440,7 @@ final class TiebaPureUITests: XCTestCase {
                 submissionError.exists,
                 "真实普通回帖被服务端明确拒绝：\(submissionError.label)"
             )
-            XCTAssertFalse(bodyEditor.exists, "普通回帖请求未完成")
+            XCTAssertTrue(app.staticTexts["thread-reply-sent"].exists, "普通回帖请求未完成")
         }
 
         let floorReplyButton = app.buttons.matching(
@@ -1420,16 +1452,16 @@ final class TiebaPureUITests: XCTestCase {
         }
         XCTAssertTrue(floorReplyButton.exists && floorReplyButton.isHittable)
         floorReplyButton.tap()
-        XCTAssertTrue(bodyEditor.waitForExistence(timeout: 10))
-        bodyEditor.tap()
+        XCTAssertTrue(replyEditor.waitForExistence(timeout: 10))
+        replyEditor.tap()
         let floorReply = environment["TIEBAPURE_LIVE_FLOOR_REPLY"]
             ?? "楼层回复测试 \(token)"
-        bodyEditor.typeText(floorReply)
-        let sendFloorReply = app.buttons["发送"]
+        replyEditor.typeText(floorReply)
+        let sendFloorReply = app.buttons["thread-reply-send"]
         XCTAssertTrue(waitForHittable(sendFloorReply, expected: true, timeout: 5))
         sendFloorReply.tap()
         waitForLiveSubmissionToFinish(
-            editor: bodyEditor,
+            editor: replyEditor,
             error: submissionError,
             timeout: 30
         )
@@ -1437,8 +1469,12 @@ final class TiebaPureUITests: XCTestCase {
             submissionError.exists,
             "真实楼层回复被服务端明确拒绝：\(submissionError.label)"
         )
-        XCTAssertFalse(bodyEditor.exists, "楼层回复请求未完成")
+        XCTAssertTrue(app.staticTexts["thread-reply-sent"].exists, "楼层回复请求未完成")
 
+        app.buttons["更多"].tap(); app.buttons["刷新"].tap()
+        let openAll = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "查看全部")).firstMatch
+        XCTAssertTrue(revealBySwipingUp(openAll, in: app, maxSwipes: 12))
+        openAll.tap()
         let subpostNavigationBar = app.navigationBars.matching(
             NSPredicate(format: "identifier CONTAINS %@", "楼的回复")
         ).firstMatch
@@ -1448,16 +1484,16 @@ final class TiebaPureUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(subpostReplyButton.waitForExistence(timeout: 20))
         subpostReplyButton.tap()
-        XCTAssertTrue(bodyEditor.waitForExistence(timeout: 10))
-        bodyEditor.tap()
+        XCTAssertTrue(replyEditor.waitForExistence(timeout: 10))
+        replyEditor.tap()
         let subpostReply = environment["TIEBAPURE_LIVE_SUBPOST_REPLY"]
             ?? "楼中楼回复测试 \(token)"
-        bodyEditor.typeText(subpostReply)
-        let sendSubpostReply = app.buttons["发送"]
+        replyEditor.typeText(subpostReply)
+        let sendSubpostReply = app.buttons["thread-reply-send"]
         XCTAssertTrue(waitForHittable(sendSubpostReply, expected: true, timeout: 5))
         sendSubpostReply.tap()
         waitForLiveSubmissionToFinish(
-            editor: bodyEditor,
+            editor: replyEditor,
             error: submissionError,
             timeout: 30
         )
@@ -1465,7 +1501,7 @@ final class TiebaPureUITests: XCTestCase {
             submissionError.exists,
             "真实楼中楼回复被服务端明确拒绝：\(submissionError.label)"
         )
-        XCTAssertFalse(bodyEditor.exists, "楼中楼回复请求未完成")
+        XCTAssertTrue(app.staticTexts["thread-reply-sent"].exists, "楼中楼回复请求未完成")
 
         let closeSubposts = subpostNavigationBar.buttons["完成"]
         XCTAssertTrue(closeSubposts.waitForExistence(timeout: 10))
@@ -1481,7 +1517,7 @@ final class TiebaPureUITests: XCTestCase {
         timeout: TimeInterval
     ) {
         let deadline = Date().addingTimeInterval(timeout)
-        while editor.exists, error.exists == false, Date() < deadline {
+        while XCUIApplication().staticTexts["thread-reply-sent"].exists == false, error.exists == false, Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
     }
@@ -1554,7 +1590,7 @@ final class TiebaPureUITests: XCTestCase {
         ]
         XCTAssertTrue(draftLoadError.waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["无法恢复草稿"].exists)
-        XCTAssertTrue(app.staticTexts["本机草稿读取失败。为避免覆盖已有内容，编辑器已暂停打开。"].exists)
+        XCTAssertTrue(app.staticTexts["本机草稿暂时无法读取。你可以重试，或清空此发布位置的草稿信息后重新编辑。"].exists)
         XCTAssertFalse(
             app.textFields["帖子标题"].exists,
             "读取草稿失败时不能展示可能覆盖旧草稿的编辑器"
@@ -1573,6 +1609,56 @@ final class TiebaPureUITests: XCTestCase {
 
         app.navigationBars["发布新帖"].buttons["取消"].tap()
         XCTAssertTrue(app.navigationBars["测试吧"].waitForExistence(timeout: 5))
+    }
+
+    func testComposerCanContinueWithoutReadingOrReplacingUnavailableDraft() {
+        let app = launchApp(account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION", "UITEST_FAIL_CONTENT_DRAFT_LOAD_ONCE"])
+        openFirstFollowedForum(in: app)
+        let newThreadButton = app.buttons["forum-new-thread-button"]
+        XCTAssertTrue(newThreadButton.waitForExistence(timeout: 8))
+        newThreadButton.tap()
+        let continueButton = app.buttons["content-composer-continue-without-draft"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 8))
+        continueButton.tap()
+        let risk = app.alerts["实验性发布功能"]
+        XCTAssertTrue(risk.waitForExistence(timeout: 8))
+        risk.buttons["了解并继续"].tap()
+        let editor = app.textViews["正文内容"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 8))
+        editor.tap()
+        editor.typeText("保留当前输入")
+        app.buttons["保存草稿"].tap()
+        XCTAssertTrue(app.staticTexts["草稿保存失败：草稿暂时无法保存，请保留当前页面后重试。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(editor.exists)
+        app.navigationBars["发布新帖"].buttons["取消"].tap()
+        XCTAssertTrue(app.buttons["继续编辑"].waitForExistence(timeout: 5))
+        app.buttons["继续编辑"].tap()
+        XCTAssertTrue(editor.exists)
+    }
+
+    func testComposerClearsUnavailableDraftAndCanSaveNewContent() {
+        let app = launchApp(account: "loggedIn", additionalArguments: ["UITEST_RESET_CONTENT_SUBMISSION", "UITEST_FAIL_CONTENT_DRAFT_LOAD_ONCE"])
+        openFirstFollowedForum(in: app)
+        let newThread = app.buttons["forum-new-thread-button"]
+        XCTAssertTrue(newThread.waitForExistence(timeout: 8))
+        newThread.tap()
+        let clear = app.buttons["content-composer-clear-draft"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 8))
+        clear.tap()
+        app.buttons["清空当前草稿"].tap()
+        let risk = app.alerts["实验性发布功能"]
+        XCTAssertTrue(risk.waitForExistence(timeout: 8))
+        risk.buttons["了解并继续"].tap()
+        let editor = app.textViews["正文内容"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 8))
+        XCTAssertEqual(editor.value as? String, "")
+        editor.tap()
+        editor.typeText("清空后可以保存的新草稿")
+        app.buttons["保存草稿"].tap()
+        XCTAssertTrue(app.staticTexts["草稿已保存"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["原有草稿已保留。本次编辑暂不能保存草稿，请发送后再退出。"].exists)
+        app.navigationBars["发布新帖"].buttons["取消"].tap()
+        XCTAssertTrue(newThread.waitForExistence(timeout: 8))
     }
 
     func testComposerPromptsForUnsavedChangesFromCancelAndSwipeDismissal() {
@@ -3266,7 +3352,7 @@ final class TiebaPureUITests: XCTestCase {
         )
         XCTAssertLessThanOrEqual(
             finalFrame.maxY,
-            (app.tabBars.firstMatch.exists ? app.tabBars.firstMatch : app.descendants(matching: .any)["floating-root-tab-bar"]).frame.minY,
+            rootTab("首页", in: app).frame.minY,
             "像素比较前图片底部不得被标签栏遮挡"
         )
         XCTAssertEqual(media.frame.width, initialFrame.width, accuracy: 1)
@@ -3609,12 +3695,12 @@ final class TiebaPureUITests: XCTestCase {
         let app = launchApp()
 
         rootTab("我的", in: app).tap()
-        XCTAssertTrue(waitForElement(named: "关于 TiebaLite", in: app, maxSwipes: 4))
-        app.buttons["关于 TiebaLite"].tap()
+        XCTAssertTrue(waitForElement(named: "关于 TiebaPure", in: app, maxSwipes: 4))
+        app.buttons["关于 TiebaPure"].tap()
         XCTAssertTrue(waitForLabelContaining("Anyu", in: app, maxSwipes: 2))
         XCTAssertTrue(waitForLabelContaining("1.0", in: app, maxSwipes: 2))
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "基于 infinityf4p")).firstMatch.exists)
-        XCTAssertTrue(waitForLabelContaining("查看 TiebaLite 源码", in: app, maxSwipes: 2))
+        XCTAssertTrue(waitForLabelContaining("查看 TiebaPure 源码", in: app, maxSwipes: 2))
         XCTAssertTrue(waitForLabelContaining("开源与许可", in: app, maxSwipes: 4))
         XCTAssertTrue(waitForLabelContaining("GPL-3.0-only", in: app, maxSwipes: 5))
         XCTAssertTrue(waitForLabelContaining("SwiftProtobuf", in: app, maxSwipes: 5))
@@ -3627,7 +3713,7 @@ final class TiebaPureUITests: XCTestCase {
         gplRow.tap()
         XCTAssertTrue(waitForLabelContaining("GNU GENERAL PUBLIC LICENSE", in: app, maxSwipes: 2))
 
-        app.navigationBars["TiebaLite"].buttons.firstMatch.tap()
+        app.navigationBars["TiebaPure"].buttons.firstMatch.tap()
         let dependencyRow = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Apache-2.0")
         ).firstMatch
@@ -5927,31 +6013,21 @@ final class TiebaPureUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
-    private func assertReplyComposer(
-        navigationTitle: String,
-        prompt: String,
-        in app: XCUIApplication,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        XCTAssertTrue(
-            app.navigationBars[navigationTitle].waitForExistence(timeout: 8),
-            "点击纯文本后应打开 \(navigationTitle) 编辑器",
-            file: file,
-            line: line
-        )
-        XCTAssertTrue(
-            app.staticTexts[prompt].waitForExistence(timeout: 5),
-            "编辑器回复目标不正确：\(prompt)",
-            file: file,
-            line: line
-        )
-        XCTAssertTrue(
-            app.textViews["正文内容"].waitForExistence(timeout: 5),
-            "回复编辑器必须显示正文输入区",
-            file: file,
-            line: line
-        )
+    private func assertReplyComposer(navigationTitle: String, prompt: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let input = app.textViews["thread-reply-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 8), file: file, line: line)
+        XCTAssertEqual(input.label, prompt, file: file, line: line)
+        XCTAssertFalse(app.navigationBars[navigationTitle].exists, "回复必须留在当前阅读页", file: file, line: line)
+    }
+
+    private func sendInlineReply(_ text: String, in app: XCUIApplication) {
+        let input = app.textViews["thread-reply-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 8))
+        input.tap(); input.typeText(text)
+        app.buttons["thread-reply-send"].tap()
+        let risk = app.alerts["非官方发布接口"]
+        if risk.waitForExistence(timeout: 1) { risk.buttons["继续发送"].tap() }
+        XCTAssertTrue(app.staticTexts["thread-reply-sent"].waitForExistence(timeout: 10))
     }
 
     private func diagnosticMetric(_ name: String, from value: String) -> Int? {
@@ -6315,12 +6391,19 @@ final class TiebaPureUITests: XCTestCase {
         ))
     }
 
+    private func rootBar(in app: XCUIApplication) -> XCUIElement {
+        let floating = app.descendants(matching: .any)["floating-root-tab-bar"]
+        return floating.exists ? floating : app.tabBars.firstMatch
+    }
+
     private func rootTab(_ label: String, in app: XCUIApplication) -> XCUIElement {
         let floatingIdentifiers = ["首页": "root-tab-home", "进吧": "root-tab-forums", "我的": "root-tab-me"]
         if let identifier = floatingIdentifiers[label] {
             let button = app.buttons[identifier]
             if button.exists { return button }
         }
+        let nativeButton = app.tabBars.buttons[label].firstMatch
+        if nativeButton.exists { return nativeButton }
         let symbolIdentifier: String?
         switch label {
         case "首页": symbolIdentifier = "house"

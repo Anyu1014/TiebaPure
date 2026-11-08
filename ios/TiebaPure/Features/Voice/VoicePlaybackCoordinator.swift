@@ -259,7 +259,7 @@ final class VoicePlaybackCoordinator: ObservableObject {
     }
 
     func state(forMD5 md5: String) -> VoicePlaybackState {
-        guard let key = VoiceAudioURLPolicy.normalizedMD5(md5), state.key == key else {
+        guard let key = VoiceAudioURLPolicy.normalizedVoiceID(md5), state.key == key else {
             return .idle
         }
         return state
@@ -270,7 +270,7 @@ final class VoicePlaybackCoordinator: ObservableObject {
         localURL: URL? = nil,
         offlineOnly: Bool = false
     ) {
-        guard let key = VoiceAudioURLPolicy.normalizedMD5(md5) else {
+        guard let key = VoiceAudioURLPolicy.normalizedVoiceID(md5) else {
             cancel()
             state = .failed(key: nil, message: VoiceAudioClientError.invalidMD5.localizedDescription)
             return
@@ -310,7 +310,7 @@ final class VoicePlaybackCoordinator: ObservableObject {
         localURL: URL? = nil,
         offlineOnly: Bool = false
     ) {
-        guard let key = VoiceAudioURLPolicy.normalizedMD5(md5) else {
+        guard let key = VoiceAudioURLPolicy.normalizedVoiceID(md5) else {
             cancel()
             state = .failed(key: nil, message: VoiceAudioClientError.invalidMD5.localizedDescription)
             return

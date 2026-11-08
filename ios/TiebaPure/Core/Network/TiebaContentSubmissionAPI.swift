@@ -665,13 +665,14 @@ enum TiebaContentSubmissionRequestFactory {
         account: Account,
         tbs: String,
         request: ContentSubmissionRequest,
+        uploadedImages: [TiebaAppUploadedImage] = [],
         now: Date = Date()
     ) throws -> [String: String] {
         guard request.target.kind == .newThread else {
             throw ContentSubmissionError.unsupported(message: "回复不能使用网页发帖协议。")
         }
-        guard request.images.isEmpty else {
-            throw ContentSubmissionValidationError.imagesUnsupportedForNewThread
+        guard uploadedImages.count == request.images.count else {
+            throw ContentSubmissionValidationError.invalidImage
         }
         guard tbs.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             throw TiebaMutationError.missingTBS
@@ -682,10 +683,28 @@ enum TiebaContentSubmissionRequestFactory {
             "kw": request.target.forumName,
             "tbs": tbs,
             "title": request.title,
-            "content": request.body,
+            "content": try webThreadContent(body: request.body, uploadedImages: uploadedImages),
             "nick_name": account.displayName.isEmpty ? account.name : account.displayName,
             "bsk": String(Int64(now.timeIntervalSince1970 * 1_000))
         ]
+    }
+
+    static func webThreadContent(body: String, uploadedImages: [TiebaAppUploadedImage]) throws -> String {
+        guard uploadedImages.isEmpty == false else { return body }
+        let text = body.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\n", with: "<br>")
+        let tags = try uploadedImages.map { image in
+            guard image.picID.utf8.count <= 2_048, image.picID.isEmpty == false,
+                  image.picID.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95 }),
+                  image.pixelWidth > 0, image.pixelHeight > 0 else {
+                throw ContentSubmissionValidationError.invalidImage
+            }
+            return "<img class=\"BDE_Image\" src=\"https://tiebapic.baidu.com/forum/pic/item/\(image.picID).jpg\" width=\"\(image.pixelWidth)\" height=\"\(image.pixelHeight)\">"
+        }
+        return ([text] + tags).filter { !$0.isEmpty }.joined(separator: "<br>")
     }
 
     static func webReplyFields(
@@ -1000,12 +1019,20 @@ extension TiebaAPI {
         account: Account,
         request: ContentSubmissionRequest
     ) async throws -> ContentSubmissionReceipt {
+        let uploadedImages: [TiebaAppUploadedImage]
+        if request.images.isEmpty {
+            uploadedImages = []
+        } else {
+            let bootstrap = try await postingBootstrap.bootstrap(bduss: account.bduss)
+            uploadedImages = try await uploadImages(request.images, account: account, bootstrap: bootstrap)
+        }
         let refreshedTBS = try await strictlyRefreshedPostingTBS(for: account)
         try Task.checkCancellation()
         let fields = try TiebaContentSubmissionRequestFactory.webThreadFields(
             account: account,
             tbs: refreshedTBS,
-            request: request
+            request: request,
+            uploadedImages: uploadedImages
         )
         let headers = try TiebaContentSubmissionRequestFactory.webThreadHeaders(
             account: account,

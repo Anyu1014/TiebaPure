@@ -1,6 +1,9 @@
 package dev.anyu.tiebapure
 
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,9 +24,19 @@ import org.json.JSONObject
 
 @Composable fun ProfileScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.profile ?: return
+    val context = LocalContext.current
+    var copied by remember(p.user.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp).padding(bottom = padding.calculateBottomPadding())) {
         IOSAvatar(p.user.name, p.user.portrait, Modifier.padding(bottom = 12.dp), diameter = 72.dp)
         Text(p.user.name, style = MaterialTheme.typography.headlineSmall)
+        val displayedId = p.tiebaId.ifBlank { p.user.id }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("ID $displayedId", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = {
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("用户ID", displayedId))
+                copied = true
+            }) { Icon(TiebaIcons.Copy, if (copied) "已复制用户ID" else "复制用户ID", tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
         Text(p.intro.ifBlank { "还没有简介" }, Modifier.padding(vertical = 16.dp))
         Row {
             TextButton(onClick = { vm.navigate(Route("following", p.user.id, "关注")) }) { Text("${p.following} 关注") }
@@ -31,7 +44,13 @@ import org.json.JSONObject
             TextButton(onClick = { vm.navigate(Route("userthreads", p.user.id, "用户主题")) }) { Text("${p.threads} 主题") }
         }
         if (p.user.id == vm.account?.uid) Button(onClick = { vm.navigate(Route("editprofile", p.user.id, "编辑资料")) }) { Text("编辑本人资料") }
-        else Button(onClick = { vm.action(onSuccess = { vm.load() }) { a -> vm.api.followUser(a, p.user.portrait, !p.followed); if (p.followed) "已取消关注" else "已关注" } }) { Text(if (p.followed) "取消关注" else "关注用户") }
+        else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                if (vm.account == null) vm.navigate(Route("login"))
+                else vm.navigate(Route("messages", p.user.id, p.user.name, "private"))
+            }) { Text("发私信") }
+            Button(onClick = { vm.action(onSuccess = { vm.load() }) { a -> vm.api.followUser(a, p.user.portrait, !p.followed); if (p.followed) "已取消关注" else "已关注" } }) { Text(if (p.followed) "取消关注" else "关注用户") }
+        }
         Text("关注的贴吧", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp))
         if (p.forumsPrivate) Text("用户未公开关注的贴吧", Modifier.padding(vertical = 12.dp))
         else if (p.forums.isEmpty()) Text("暂无贴吧", Modifier.padding(vertical = 12.dp))
@@ -82,6 +101,7 @@ import org.json.JSONObject
     var title by remember(draftKey) { mutableStateOf(draft?.optString("title").orEmpty()) }
     val emoticonEditor = remember(draftKey) { NativeEmoticonEditorState() }
     var showEmoticons by remember { mutableStateOf(false) }
+    var showsMentions by remember { mutableStateOf(false) }
     var text by remember(draftKey) { mutableStateOf(draft?.optString("text").orEmpty()) }
     var images by remember(draftKey) { mutableStateOf(draft?.optJSONArray("images")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()) }
     var confirm by remember { mutableStateOf(false) }
@@ -102,7 +122,13 @@ import org.json.JSONObject
         Text("${route.id}吧 · ${account.name}", style = MaterialTheme.typography.bodySmall)
         if (newThread) OutlinedTextField(value = title, onValueChange = { if (it.length <= 4096) { title = it; save() } else vm.report("标题过长") }, label = { Text("标题，最多 64 字") }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
         NativeEmoticonEditor(text, { if (it.length <= 40000) { text = it; save() } else vm.report("正文过长") }, emoticonEditor, Modifier.fillMaxWidth().padding(vertical = 12.dp))
-        TextButton(onClick = { showEmoticons = !showEmoticons }) { Text(if (showEmoticons) "收起表情" else "贴吧表情") }
+        Row {
+            TextButton(onClick = { showEmoticons = !showEmoticons }) { Text(if (showEmoticons) "收起表情" else "贴吧表情") }
+            TextButton(onClick = { showsMentions = true }, enabled = !vm.submitting) { Text("@ 艾特") }
+        }
+        if (showsMentions) FollowedPrivateRecipientPicker(vm, account, onDismiss = { showsMentions = false }, onSelected = { user ->
+            emoticonEditor.view?.insertToken("@" + user.mentionName + " "); showsMentions = false
+        })
         if (showEmoticons) androidx.compose.foundation.lazy.LazyRow(Modifier.fillMaxWidth().height(52.dp)) {
             items(TiebaEmoticon.names.entries.toList()) { (id, label) ->
                 IconButton(onClick = { emoticonEditor.view?.insertToken("#($label)") }) {
@@ -110,12 +136,40 @@ import org.json.JSONObject
                 }
             }
         }
-        if (!newThread) {
-            OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = images.size < 9 && !vm.submitting) { Text("选择回复图片 ${images.size}/9") }
-            images.forEachIndexed { index, uri -> Row(Modifier.fillMaxWidth()) { Text("图片 ${index + 1}", Modifier.weight(1f)); TextButton(onClick = { images = images - uri; save() }) { Text("移除") } } }
-        }
+        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = images.size < 9 && !vm.submitting) { Text("选择图片 ${images.size}/9") }
+        images.forEachIndexed { index, uri -> Row(Modifier.fillMaxWidth()) { Text("图片 ${index + 1}", Modifier.weight(1f)); TextButton(onClick = { images = images - uri; save() }) { Text("移除") } } }
         Text("正文自动保存在本机草稿中。发布与回复通过非官方接口，可能触发贴吧风控。", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { if (save()) confirm = true }, enabled = !vm.submitting && (text.isNotBlank() || images.isNotEmpty()) && (!newThread || title.isNotBlank()), modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text(if (vm.submitting) "正在提交…" else "发送") }
     }
     if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("确认发送？") }, text = { Text("将以当前百度账号公开发布内容。遇到结果未知时，请先刷新确认，避免重复发送。") }, confirmButton = { TextButton(onClick = { confirm = false; vm.submitDraft(title, text, images, draftKey) }) { Text("确认发送") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("取消") } })
+}
+
+@Composable fun UserSearchScreen(vm: AppViewModel) {
+    var word by remember { mutableStateOf(vm.route.id) }
+    var submitted by remember { mutableStateOf(vm.route.id) }
+    var users by remember { mutableStateOf(emptyList<User>()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(submitted) {
+        users = emptyList(); error = null
+        if (submitted.isBlank()) return@LaunchedEffect
+        loading = true
+        try { users = vm.api.searchUsers(submitted, vm.account) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) { error = e.message }
+        finally { loading = false }
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        OutlinedTextField(word, { if (it.length <= 500) word = it }, label = { Text("昵称或主页 ID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        TextButton(onClick = { submitted = word.trim() }) { Text("搜索用户") }
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        androidx.compose.foundation.lazy.LazyColumn {
+            items(users.size) { i -> val user = users[i]
+                TextButton(onClick = { vm.navigate(Route("user", user.id, user.name)) }) {
+                    IOSAvatar(user.name, user.portrait, diameter = 44.dp); Spacer(Modifier.width(12.dp)); Text(user.name)
+                }
+            }
+        }
+    }
 }

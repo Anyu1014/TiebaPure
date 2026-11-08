@@ -1,0 +1,28 @@
+syntax = "proto2";
+package tiebapure.official;
+option java_package = "dev.anyu.tiebapure.official";
+option java_outer_classname = "OfficialIM";
+// Minimal projections of the official Tieba LCS protobuf messages; unknown fields remain untouched.
+message IMError { optional int32 code = 1; optional string message = 2; }
+message User { optional int64 id = 1; optional string name = 2; optional string nickname = 3; optional string portrait = 4; optional string display_name = 18; }
+message OnlineData { optional string bduss = 1; optional string device = 2; optional bytes secret_key = 3; optional string stoken = 12; }
+message OnlineRequest { optional string cuid = 1; optional OnlineData data = 2; }
+message OnlineResult { repeated Group groups = 1; optional User user = 2; }
+message OnlineResponse { optional IMError error = 1; optional OnlineResult data = 2; }
+message CommitData { optional int64 to_uid = 2; optional int32 msg_type = 3; optional string content = 4; optional int64 record_id = 6; optional int32 to_user_type = 7; }
+message CommitRequest { optional CommitData data = 1; }
+message CommitResult { optional int64 id = 1; optional int64 group_id = 2; optional int64 record_id = 3; optional int64 to_uid = 4; optional int32 to_user_type = 5; }
+message CommitResponse { optional IMError error = 1; optional CommitResult data = 2; }
+message GroupCursor { optional int64 group_id = 1; optional int64 last_msg_id = 2; }
+message Repair { optional string follow_type = 1; }
+message PullData { repeated GroupCursor groups = 6; optional string get_type = 7; optional Repair repair = 11; }
+message PullRequest { optional string cuid = 1; optional PullData data = 2; }
+message Group { optional int64 id = 1; optional string name = 3; optional string portrait = 5; optional int32 type = 20; optional int64 last_msg_id = 21; optional string nickname = 26; optional int32 last_msg_time = 30; }
+message ChatMessage { optional int64 id = 1; optional int64 group_id = 2; optional int32 type = 3; optional int64 from_uid = 4; optional string content = 5; optional int32 status = 6; optional int32 timestamp = 8; optional int64 record_id = 9; optional User from_user = 10; optional int64 to_uid = 11; optional User to_user = 12; }
+message GroupMessages { optional Group group = 1; repeated ChatMessage messages = 2; optional int32 has_more = 3; }
+message UserMessages { repeated ChatMessage messages = 1; }
+message PullResult { repeated GroupMessages groups = 1; optional UserMessages personal = 3; }
+message PullResponse { optional IMError error = 1; optional PullResult data = 2; }
+
+message ReadCursor { optional int64 peer_id = 1; optional int64 message_id = 2; }
+message Inbox { repeated Group groups = 1; repeated ChatMessage messages = 2; repeated ReadCursor read = 3; }

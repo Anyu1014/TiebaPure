@@ -5,11 +5,22 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct ContentComposerView: View {
+    @EnvironmentObject private var environment: AppEnvironment
+    @State private var mentionAccount: Account?
+    @State private var showsMentions = false
+    @State private var showsInlineRiskConfirmation = false
+    @State private var inlineDidSend = false
     let target: ContentSubmissionTarget
 
+    private let inline: Bool
+    private let focusRequest: Int
+    private let takeFocusRequest: () -> Bool
+    private let onDraftChange: (ContentSubmissionRequest) -> Void
+    private let onEditingChange: (Bool) -> Void
     private let onCancel: () -> Void
     private let onSaveDraft: (ContentSubmissionRequest) async throws -> Void
     private let onSend: (ContentSubmissionRequest) async throws -> ContentSubmissionReceipt
+    private let draftPersistenceNotice: String?
     private let onSent: (ContentSubmissionReceipt) -> Void
 
     @State private var title: String
@@ -37,15 +48,27 @@ struct ContentComposerView: View {
         initialTitle: String = "",
         initialBody: String = "",
         initialImages: [ContentSubmissionImage] = [],
+        draftPersistenceNotice: String? = nil,
+        inline: Bool = false,
+        focusRequest: Int = 0,
+        takeFocusRequest: @escaping () -> Bool = { false },
+        onDraftChange: @escaping (ContentSubmissionRequest) -> Void = { _ in },
+        onEditingChange: @escaping (Bool) -> Void = { _ in },
         onCancel: @escaping () -> Void,
         onSaveDraft: @escaping (ContentSubmissionRequest) async throws -> Void,
         onSend: @escaping (ContentSubmissionRequest) async throws -> ContentSubmissionReceipt,
         onSent: @escaping (ContentSubmissionReceipt) -> Void = { _ in }
     ) {
+        self.inline = inline
+        self.focusRequest = focusRequest
+        self.takeFocusRequest = takeFocusRequest
+        self.onDraftChange = onDraftChange
+        self.onEditingChange = onEditingChange
         self.target = target
         self.onCancel = onCancel
         self.onSaveDraft = onSaveDraft
         self.onSend = onSend
+        self.draftPersistenceNotice = draftPersistenceNotice
         self.onSent = onSent
         let initialAttachments = Array(initialImages.prefix(
             ContentComposerPolicy.maximumImages(for: target.kind)
@@ -62,6 +85,71 @@ struct ContentComposerView: View {
     }
 
     var body: some View {
+        Group {
+            if inline { inlineEditor } else { fullEditor }
+        }
+        .compatibleOnChange(of: currentRequest) { _, request in
+            if !request.body.isEmpty || !request.images.isEmpty { inlineDidSend = false }
+            onDraftChange(request)
+        }
+        .compatibleOnChange(of: bodyIsFocused || showsEmoticons || showsMentions || isBusy || photoLoadProgress != nil) { _, editing in onEditingChange(editing) }
+    }
+
+    private var inlineEditor: some View {
+        VStack(spacing: 8) {
+            if attachments.isEmpty == false || photoLoadProgress != nil || showsEmoticons || inlineSubmissionFailed || attachmentErrorMessage != nil || inlineDidSend {
+                VStack(spacing: 8) {
+                    if attachments.isEmpty == false || photoLoadProgress != nil { attachmentSection }
+                    if showsEmoticons { emoticonSection }
+                    if inlineDidSend { Text("回复已发送").font(.caption).foregroundStyle(.green).accessibilityIdentifier("thread-reply-sent") }
+                    statusSection
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+            }
+            HStack(alignment: .center, spacing: 0) {
+                ZStack(alignment: .leading) {
+                    if bodyText.isEmpty {
+                        Text(target.prompt).foregroundStyle(.secondary).font(.subheadline).lineLimit(1)
+                            .padding(.leading, 6).allowsHitTesting(false)
+                    }
+                    NativeEmoticonEditor(text: $bodyText, selection: $bodySelection, isFocused: bodyIsFocused,
+                        onFocus: { bodyIsFocused = true; showsEmoticons = false }, onBlur: { bodyIsFocused = false })
+                        .frame(maxWidth: 240).frame(height: 44)
+                        .accessibilityLabel(target.prompt)
+                        .accessibilityIdentifier("thread-reply-input")
+                        .disabled(isBusy)
+                }
+                .frame(maxWidth: .infinity)
+                mentionButton.labelStyle(.iconOnly).frame(width: 44)
+                emoticonButton.labelStyle(.iconOnly).frame(width: 44)
+                mediaButton.labelStyle(.iconOnly).frame(width: 44)
+                Button(action: submit) {
+                    Image(systemName: isBusy ? "hourglass" : "arrow.up.circle.fill")
+                        .font(.title2).frame(width: 44, height: 44)
+                }
+                .disabled(!canSubmit).accessibilityLabel("发送回复")
+                .accessibilityIdentifier("thread-reply-send")
+            }
+            .frame(height: 62)
+            .padding(.horizontal, 8)
+        }
+        .compatibleOnChange(of: photoSelection) { _, selection in preparePhotoSelection(selection) }
+        .compatibleOnChange(of: focusRequest) { _, _ in if takeFocusRequest() { bodyIsFocused = true } }
+        .alert("非官方发布接口", isPresented: $showsInlineRiskConfirmation) {
+            Button("继续发送") { ContentSubmissionRiskPolicy.acknowledge(); submit() }
+            Button("取消", role: .cancel) {}
+        } message: { Text("将以当前百度账号公开发布内容，可能触发贴吧风控。结果未知时请先刷新确认，避免重复发送。") }
+        .onAppear { if takeFocusRequest() { bodyIsFocused = true } }
+        .onDisappear { photoLoadingTask?.cancel(); onDraftChange(currentRequest); onEditingChange(false) }
+    }
+
+    private var inlineSubmissionFailed: Bool {
+        if case .failed = submissionState { return true }
+        return false
+    }
+
+    private var fullEditor: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -207,7 +295,7 @@ struct ContentComposerView: View {
                 }, onBlur: {
                     if bodyIsFocused { bodyIsFocused = false }
                 })
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, inline ? 0 : 8)
                     .padding(.vertical, 6)
                     .frame(minHeight: max(editorMinimumHeight, 132))
                     .accessibilityLabel("正文内容")
@@ -303,6 +391,9 @@ struct ContentComposerView: View {
     @ViewBuilder
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let draftPersistenceNotice {
+                ContentComposerStatusView(message: draftPersistenceNotice, systemImage: "doc.badge.exclamationmark", tint: .secondary)
+            }
             if let attachmentErrorMessage {
                 ContentComposerStatusView(
                     message: attachmentErrorMessage,
@@ -371,6 +462,7 @@ struct ContentComposerView: View {
             HStack(spacing: 4) {
                 mediaButton
                 emoticonButton
+                mentionButton
                 Spacer(minLength: 8)
                 draftButton
             }
@@ -379,6 +471,7 @@ struct ContentComposerView: View {
                 HStack(spacing: 4) {
                     mediaButton
                     emoticonButton
+                    mentionButton
                     Spacer(minLength: 8)
                 }
                 HStack {
@@ -401,9 +494,7 @@ struct ContentComposerView: View {
             currentCount: attachments.count,
             kind: target.kind
         )
-        if target.kind == .newThread {
-            EmptyView()
-        } else if remaining > 0 {
+        if remaining > 0 {
             PhotosPicker(
                 selection: $photoSelection,
                 maxSelectionCount: remaining,
@@ -412,7 +503,7 @@ struct ContentComposerView: View {
             ) {
                 Label("图片", systemImage: "photo.on.rectangle.angled")
                     .frame(minHeight: 44)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, inline ? 0 : 8)
                     .contentShape(Rectangle())
             }
             .disabled(isBusy || photoLoadProgress != nil)
@@ -421,8 +512,36 @@ struct ContentComposerView: View {
             Label("图片", systemImage: "photo.on.rectangle.angled")
                 .foregroundStyle(.tertiary)
                 .frame(minHeight: 44)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, inline ? 0 : 8)
                 .accessibilityLabel("图片数量已达上限")
+        }
+    }
+
+    private var mentionButton: some View {
+        Button {
+            Task { @MainActor in
+                do {
+                    mentionAccount = try await environment.accountStore.load()
+                    if mentionAccount != nil { bodyIsFocused = false; showsEmoticons = false; showsMentions = true }
+                } catch { attachmentErrorMessage = error.localizedDescription }
+            }
+        } label: { Label("艾特", systemImage: "at").frame(minHeight: 44).padding(.horizontal, inline ? 0 : 8) }
+        .disabled(isBusy)
+        .sheet(isPresented: $showsMentions) {
+            if let mentionAccount {
+                NavigationStack {
+                    FollowedUsersView(account: mentionAccount) { user in
+                        let token = "@" + (user.name.isEmpty ? user.displayNameResolved : user.name) + " "
+                        let source = bodyText as NSString
+                        let start = min(bodySelection.location, source.length)
+                        let length = min(bodySelection.length, source.length - start)
+                        bodyText = source.replacingCharacters(in: NSRange(location: start, length: length), with: token)
+                        bodySelection = NSRange(location: start + (token as NSString).length, length: 0)
+                        showsMentions = false
+                    }
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { showsMentions = false } } }
+                }
+            }
         }
     }
 
@@ -440,7 +559,7 @@ struct ContentComposerView: View {
         } label: {
             Label("表情", systemImage: "face.smiling")
                 .frame(minHeight: 44)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, inline ? 0 : 8)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -458,7 +577,7 @@ struct ContentComposerView: View {
             } else {
                 Label("保存草稿", systemImage: "doc.badge.plus")
                     .frame(minHeight: 44)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, inline ? 0 : 8)
             }
         }
         .buttonStyle(.plain)
@@ -518,6 +637,7 @@ struct ContentComposerView: View {
 
     private func submit() {
         guard isBusy == false, submissionState.didSucceed == false else { return }
+        if inline && !ContentSubmissionRiskPolicy.hasAcknowledged() { showsInlineRiskConfirmation = true; return }
         let request = currentRequest
         if let message = ContentComposerPolicy.validationMessage(for: request) {
             submissionState = .failed(message)
@@ -533,8 +653,14 @@ struct ContentComposerView: View {
                 let receipt = try await onSend(request)
                 // A successful write is irreversible. Consume its receipt even
                 // if SwiftUI cancelled the view-owned caller while it awaited.
-                submissionState = .sent(receipt)
-                dismissalGate.allowProgrammaticDismissal()
+                if inline {
+                    bodyText = ""; attachments = []; bodySelection = NSRange(location: 0, length: 0)
+                    submissionState = .idle
+                    inlineDidSend = true
+                } else {
+                    submissionState = .sent(receipt)
+                    dismissalGate.allowProgrammaticDismissal()
+                }
                 onSent(receipt)
             } catch is CancellationError {
                 submissionState = .idle
@@ -793,7 +919,7 @@ enum ContentComposerPolicy {
     }
 
     static func maximumImages(for kind: ContentSubmissionKind) -> Int {
-        kind == .newThread ? 0 : ContentSubmissionPolicy.maximumImages
+        ContentSubmissionPolicy.maximumImages
     }
 
     static func remainingImageSlots(currentCount: Int, kind: ContentSubmissionKind) -> Int {
@@ -1043,7 +1169,7 @@ private enum ContentComposerSubmissionState: Equatable {
     }
 }
 
-private struct ContentComposerEmoticon: Identifiable, Equatable, Sendable {
+struct ContentComposerEmoticon: Identifiable, Equatable, Sendable {
     let imageName: String
     let label: String
     let token: String
@@ -1051,7 +1177,7 @@ private struct ContentComposerEmoticon: Identifiable, Equatable, Sendable {
     var id: String { imageName }
 }
 
-private enum ContentComposerEmoticonCatalog {
+enum ContentComposerEmoticonCatalog {
     private static let imageNumbers = Array(1...50) + Array(77...84) + [89]
 
     static let entries: [ContentComposerEmoticon] = imageNumbers.compactMap { number in

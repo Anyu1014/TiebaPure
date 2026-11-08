@@ -6,6 +6,20 @@ import XCTest
 /// are recycled.
 final class InlineTextReuseTests: XCTestCase {
     @MainActor
+    func testChatTextUsesNaturalWidthAndWrapsLongMessages() {
+        let view = InlineContentTextView()
+        func size(_ text: String) -> CGSize {
+            view.contentFittingSize(maximumWidth: 280, attributedText: paragraph(text), maximumNumberOfLines: 0, lineBreakMode: .byWordWrapping)
+        }
+        let short = size("好")
+        let medium = size("这是一条更长的消息")
+        let long = size(String(repeating: "这是一段需要换行的私信。", count: 12))
+        XCTAssertLessThan(short.width, medium.width)
+        XCTAssertLessThan(medium.width, long.width)
+        XCTAssertLessThanOrEqual(long.width, 280)
+        XCTAssertGreaterThan(long.height, short.height)
+    }
+    @MainActor
     override func setUp() {
         super.setUp()
         InlineContentTextMeasurementCache.drain()

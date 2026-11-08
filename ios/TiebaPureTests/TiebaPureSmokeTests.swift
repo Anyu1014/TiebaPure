@@ -3325,7 +3325,7 @@ final class TiebaPureSmokeTests: XCTestCase {
                 now: now,
                 calendar: calendar
             ),
-            "昨天 09:30  湖南"
+            "09:30:00「07-12」  湖南"
         )
         let olderDate = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 7, day: 10, hour: 9)))
         XCTAssertEqual(
@@ -3335,7 +3335,7 @@ final class TiebaPureSmokeTests: XCTestCase {
                 now: now,
                 calendar: calendar
             ),
-            "07-10  浙江"
+            "09:00:00「07-10」  浙江"
         )
         XCTAssertEqual(ThreadPostMetadataText.firstLocation("  ", nil, "广东"), "广东")
     }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -21,6 +23,8 @@ import androidx.compose.ui.graphics.layer.*
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.motionEventSpy
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,6 +101,11 @@ internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null 
     feedback: @Composable () -> Unit = {},
     startAlignedTitle: Boolean = false,
     titleTrailingInset: Dp = 96.dp,
+    tabPosition: BottomBarPosition = BottomBarPosition.LEFT,
+    showTabLabels: Boolean = true,
+    autoCollapseTabs: Boolean = true,
+    account: Account? = null,
+    scrollKey: String = root,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val layer = rememberGraphicsLayer()
@@ -106,9 +115,15 @@ internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null 
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val toolbarButtonTint = (if (dark) Color(0xff080f16) else Color.White).copy(alpha = 0.9f)
     val navigationHeight = IOSLayout.navigationHeight
+    val motion = remember(scrollKey, account?.uid, autoCollapseTabs) { BottomBarMotion() }
+    var collapsed by remember(motion) { mutableStateOf(false) }
+    val density = LocalDensity.current.density
+    val input = remember(motion) { BottomBarPanInput(motion) }
+    val touchObserver = remember(input, density) { BottomBarTouchObserver(input, density) { collapsed = it } }
+    DisposableEffect(touchObserver) { onDispose { touchObserver.close() } }
     CompositionLocalProvider(LocalAnyuBackdrop provides AnyuBackdrop(layer, origin)) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }) {
-        Box(Modifier.fillMaxSize().onGloballyPositioned { val screen = it.localToScreen(Offset.Zero); if (screen.x.isFinite() && screen.y.isFinite()) origin = screen }.drawWithContent {
+        Box(Modifier.fillMaxSize().motionEventSpy { event -> if (showTabs && autoCollapseTabs) touchObserver.observe(event) else touchObserver.close() }.onGloballyPositioned { val screen = it.localToScreen(Offset.Zero); if (screen.x.isFinite() && screen.y.isFinite()) origin = screen }.drawWithContent {
             layer.record { this@drawWithContent.drawContent() }
             drawLayer(layer)
         }) {
@@ -135,20 +150,35 @@ internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null 
             }
         }
         Column(Modifier.align(Alignment.TopCenter).padding(top = status + navigationHeight).fillMaxWidth()) { feedback() }
-        if (showTabs) AnyuFrostedSurface(layer, origin, Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, bottom = bottom + 8.dp).widthIn(max = IOSLayout.barWidth).fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().padding(4.dp).heightIn(min = IOSLayout.barHeight - 8.dp)) {
+        if (showTabs) BoxWithConstraints(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = bottom + 8.dp)) {
+            val expandedWidth = minOf(IOSLayout.barWidth, maxWidth)
+            val progress by animateFloatAsState(if (collapsed) 1f else 0f, spring(dampingRatio = 1f, stiffness = 380f, visibilityThreshold = 0.001f), label = "bottom-bar-morph")
+            val transition = BottomBarTransition(progress)
+            val fraction = transition.progress
+            val compactOffset by animateDpAsState(((maxWidth - IOSLayout.barHeight) / 2) * tabPosition.fraction, spring(dampingRatio = 1f, stiffness = 380f), label = "bottom-bar-position")
+            val width = expandedWidth + (IOSLayout.barHeight - expandedWidth) * fraction
+            AnyuFrostedSurface(layer, origin, Modifier.align(Alignment.Center).offset(x = compactOffset * fraction).width(width).height(IOSLayout.barHeight).testTag("floating-root-tab-bar")) {
+            Row(Modifier.align(Alignment.Center).requiredWidth(expandedWidth).padding(4.dp).height(IOSLayout.barHeight - 8.dp).graphicsLayer { alpha = transition.expandedOpacity; scaleX = 1f - 0.06f * fraction; scaleY = scaleX }.then(if (collapsed) Modifier.clearAndSetSemantics {} else Modifier)) {
                 listOf(Triple("home", "首页", Icons.Default.Home), Triple("forums", "进吧", Icons.Default.List), Triple("me", "我的", Icons.Default.AccountCircle)).forEach { (kind, label, icon) ->
                     val selected = root == kind
-                    Column(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(50)).background(if (selected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else Color.Transparent).selectable(selected = selected, role = Role.Button, onClick = { onTab(kind) }).padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Column(Modifier.weight(1f).heightIn(min = 54.dp).clip(RoundedCornerShape(50)).background(if (selected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else Color.Transparent).selectable(selected = selected, enabled = !collapsed, role = Role.Button, onClick = { onTab(kind) }).then(if (!showTabLabels) Modifier.semantics { contentDescription = label } else Modifier).padding(vertical = 5.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         val color = if (selected) IOSLayout.blue else MaterialTheme.colorScheme.onSurface
-                        if (kind == "forums") Canvas(Modifier.size(23.dp)) {
+                        val iconSize = if (showTabLabels) 23.dp else 29.dp
+                        if (kind == "forums") Canvas(Modifier.size(iconSize)) {
                             val gap = 2.dp.toPx(); val edge = (size.width - gap) / 2
                             for (x in 0..1) for (y in 0..1) drawRoundRect(color, Offset(x * (edge + gap), y * (edge + gap)), androidx.compose.ui.geometry.Size(edge, edge), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
-                        } else Icon(icon, null, tint = color, modifier = Modifier.size(23.dp))
-                        Spacer(Modifier.height(3.dp))
-                        Text(label, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) IOSLayout.blue else MaterialTheme.colorScheme.onSurface)
+                        } else Icon(icon, null, tint = color, modifier = Modifier.size(iconSize))
+                        if (showTabLabels) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(label, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.SemiBold, color = if (selected) IOSLayout.blue else MaterialTheme.colorScheme.onSurface)
+                        }
                     }
                 }
+            }
+            Box(Modifier.align(Alignment.Center).size(IOSLayout.barHeight).graphicsLayer { alpha = transition.avatarOpacity; scaleX = 0.88f + 0.12f * fraction; scaleY = scaleX }.then(if (collapsed) Modifier.clickable(role = Role.Button) { motion.expand(); collapsed = false }.semantics { contentDescription = "展开底栏" }.testTag("collapsed-root-tab-avatar") else Modifier.clearAndSetSemantics {}), contentAlignment = Alignment.Center) {
+                if (account == null) Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(44.dp))
+                else IOSAvatar(account.name, account.portrait, diameter = 44.dp)
+            }
             }
         }
         Box(Modifier.align(Alignment.BottomCenter).padding(bottom = if (showTabs) bottom + 84.dp else bottom + 12.dp)) { snackbar() }

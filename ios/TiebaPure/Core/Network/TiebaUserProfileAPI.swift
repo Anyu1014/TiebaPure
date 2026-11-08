@@ -223,6 +223,20 @@ enum UserProfileMutationError: Error, Equatable, CustomStringConvertible {
 typealias UserFollowResponseDTO = TiebaMutationResponseDTO
 
 extension TiebaAPI {
+    func userByTiebaID(_ id: String, account: Account?) async throws -> UserSummary {
+        guard let number = Int64(id), number > 0, String(number) == id else { throw PrivateMessageError.invalidUser }
+        var request = Tiebapure_Profile_PrivateMessageUserRequest()
+        request.data.common = requestBuilder.common(account: account)
+        request.data.tiebaUid = id
+        let multipart = try requestBuilder.multipart(protobuf: request, account: account, includeSToken: false)
+        let response = try await client.postProtobuf(.userByTiebaID, body: multipart.body, contentType: multipart.contentType,
+                                                    headers: ["X-BD-DATA-TYPE": "protobuf"], as: Tiebapure_Profile_PrivateMessageUserResponse.self)
+        try TiebaResponseValidator.validate(code: Int(response.error.errorCode), message: response.error.userMsg.isEmpty ? response.error.errorMsg : response.error.userMsg)
+        guard response.hasData, response.data.hasUser, response.data.user.id > 0,
+              response.data.user.tiebaUid == id else { throw PrivateMessageError.invalidUser }
+        return UserMapper.fromUser(response.data.user)
+    }
+
     func userProfile(account: Account?, user: UserSummary) async throws -> UserProfile {
         let context = UserProfileRequestFactory.profileRequest(
             account: account,

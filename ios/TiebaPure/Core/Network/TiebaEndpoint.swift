@@ -19,6 +19,7 @@ enum TiebaEndpoint {
     case searchThread
     case searchUser
     case userProfile
+    case userByTiebaID
     case userThreads
     case modifyProfile
     case deleteOwnThread
@@ -32,6 +33,7 @@ enum TiebaEndpoint {
     case followForum
     case unfollowForum
     case signForum
+    case accountLikes
     case threadStoreList
     case addThreadStore
     case removeThreadStore
@@ -41,6 +43,8 @@ enum TiebaEndpoint {
     case webUploadPicture(nonce: String)
     case addPost
     case uploadPicture
+    case privateVoiceChunk
+    case privateVoiceFinish
 
     var url: URL {
         switch self {
@@ -82,6 +86,10 @@ enum TiebaEndpoint {
             return Self.base.appending(path: "/mo/q/search/thread")
         case .searchUser:
             return Self.base.appending(path: "/mo/q/search/user")
+        case .userByTiebaID:
+            return Self.protobufBase
+                .appending(path: "/c/u/user/getUserByTiebaUid")
+                .appending(queryItems: [.init(name: "cmd", value: "309702"), .init(name: "format", value: "protobuf")])
         case .userProfile:
             return Self.protobufBase
                 .appending(path: "/c/u/user/profile")
@@ -123,6 +131,8 @@ enum TiebaEndpoint {
             return Self.socialBase.appending(path: "/c/c/forum/unfavolike")
         case .signForum:
             return Self.appBase.appending(path: "/c/c/forum/sign")
+        case .accountLikes:
+            return Self.socialBase.appending(path: "/c/u/feed/userAgree")
         case .threadStoreList:
             return Self.appBase.appending(path: "/c/u/feed/threadStoreList")
         case .addThreadStore:
@@ -150,6 +160,10 @@ enum TiebaEndpoint {
                 .appending(queryItems: [.init(name: "cmd", value: "309731")])
         case .uploadPicture:
             return Self.protobufBase.appending(path: "/c/s/uploadPicture")
+        case .privateVoiceChunk:
+            return Self.protobufBase.appending(path: "/c/c/voice/chunkupload")
+        case .privateVoiceFinish:
+            return Self.protobufBase.appending(path: "/c/c/voice/voice_fin_chunk_upload")
         }
     }
 }

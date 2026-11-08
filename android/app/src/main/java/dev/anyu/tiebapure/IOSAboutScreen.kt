@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 @Composable fun AboutScreen(vm: AppViewModel, padding: PaddingValues) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = padding.calculateBottomPadding())) {
-        GroupHeader("TiebaLite")
+        GroupHeader("TiebaPure")
         IOSGroup {
             AboutRow("版本", BuildConfig.VERSION_NAME)
             AboutRow("项目作者", "Anyu", blueValue = true)
@@ -26,8 +26,8 @@ import androidx.compose.ui.unit.sp
         }
         GroupHeader("开源与许可")
         IOSGroup {
-            AboutRow("查看 TiebaLite 源码", blueValue = true) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Anyu1014/TiebaLite"))) }
-            AboutRow("TiebaLite", "GPL-3.0-only") { vm.navigate(Route("license", "LICENSE", "TiebaLite")) }
+            AboutRow("查看 TiebaPure 源码", blueValue = true) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Anyu1014/TiebaLite"))) }
+            AboutRow("TiebaPure", "GPL-3.0-only") { vm.navigate(Route("license", "LICENSE", "TiebaPure")) }
             AboutRow("SwiftProtobuf", "Apache-2.0") { vm.navigate(Route("license", "licenses/SwiftProtobuf-Apache-2.0.txt", "SwiftProtobuf（上游 iOS 依赖）")) }
             AboutRow("Android 第三方依赖", "许可与版权") { vm.navigate(Route("license", "THIRD_PARTY_NOTICES.md", "Android 第三方依赖")) }
         }

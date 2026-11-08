@@ -20,9 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal fun commentLikeCount(count: Long): String = when {
@@ -32,7 +30,7 @@ internal fun commentLikeCount(count: Long): String = when {
 }
 
 internal fun commentMetadata(timestamp: Long, region: String, format: PostTimestampFormat? = null, zone: ZoneId = ZoneId.systemDefault()): String {
-    val date = if (format != null) postTimestampText(timestamp, format, zone) else if (timestamp in 1..253402300799L) Instant.ofEpochSecond(timestamp).atZone(zone).format(DateTimeFormatter.ofPattern("MM-dd")) else ""
+    val date = postTimestampText(timestamp, format ?: PostTimestampFormat.SUBPOST, zone)
     return listOf(date, region.removePrefix("IP属地：").removePrefix("IP属地:").trim()).filter(String::isNotBlank).joinToString("  ")
 }
 
@@ -40,12 +38,12 @@ internal fun commentMetadata(timestamp: Long, region: String, format: PostTimest
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         listOf(false to "全部回复", true to "只看楼主").forEach { (value, label) ->
             Text(label, fontSize = 15.sp, fontWeight = if (vm.onlyAuthor == value) FontWeight.SemiBold else FontWeight.Normal, color = if (vm.onlyAuthor == value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.heightIn(min = 44.dp).wrapContentHeight().clickable { if (vm.onlyAuthor != value) { vm.onlyAuthor = value; vm.load(1) } }.padding(end = 16.dp))
+                modifier = Modifier.heightIn(min = 44.dp).wrapContentHeight().clickable { vm.selectReplies(authorOnly = value) }.padding(end = 16.dp))
         }
         Spacer(Modifier.weight(1f))
         Row(Modifier.width(142.dp)) {
             listOf(2 to "热门", 0 to "正序", 1 to "倒序").forEach { (value, label) ->
-                Box(Modifier.weight(1f).height(44.dp).background(if (vm.sort == value) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(50)).clickable { if (vm.sort != value) { vm.sort = value; vm.load(1) } }.semantics { selected = vm.sort == value; role = Role.RadioButton }, contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).height(44.dp).background(if (vm.sort == value) MaterialTheme.colorScheme.surface else Color.Transparent, RoundedCornerShape(50)).clickable { vm.selectReplies(order = value) }.semantics { selected = vm.sort == value; role = Role.RadioButton }, contentAlignment = Alignment.Center) {
                     Text(label, fontSize = 14.sp, fontWeight = if (vm.sort == value) FontWeight.SemiBold else FontWeight.Normal, color = if (vm.sort == value) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -58,7 +56,7 @@ internal fun commentMetadata(timestamp: Long, region: String, format: PostTimest
     val route = vm.route
     val offline = route.kind == "offline"
     var liked by remember(post.id, post.liked) { mutableStateOf(post.liked) }
-    val count = (post.likes ?: if (mainPost) vm.data.thread?.thread?.likes else null)?.let { (it + if (liked == post.liked) 0 else if (liked) 1 else -1).coerceAtLeast(0) }
+    val count = (if (mainPost) vm.data.thread?.thread?.likes ?: post.likes else post.likes)?.let { (it + if (liked == post.liked) 0 else if (liked) 1 else -1).coerceAtLeast(0) }
     val threadAuthor = vm.data.thread?.thread?.author?.id
     val isThreadAuthor = mainPost || post.author.id.toLongOrNull()?.let { it > 0 && post.author.id == threadAuthor } == true
     val openUser = { if (post.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", post.author.id, post.author.name)) }
@@ -80,7 +78,7 @@ internal fun commentMetadata(timestamp: Long, region: String, format: PostTimest
             }
             Row(Modifier.heightIn(min = 44.dp).testTag("post-like-${post.id}").clickable(enabled = !offline && vm.likesEnabled) {
                 val desired = !liked
-                vm.action(onSuccess = { liked = desired }) { account -> vm.api.like(account, route.id, post.id, if (mainPost) LikeObject.THREAD else if (route.kind == "subposts") LikeObject.SUBPOST else LikeObject.POST, desired); if (desired) "已点赞" else "已取消点赞" }
+                vm.action(onSuccess = { vm.applyPostLike(route.id, post.id, mainPost, desired); liked = desired }) { account -> vm.api.like(account, route.id, post.id, if (mainPost) LikeObject.THREAD else if (route.kind == "subposts") LikeObject.SUBPOST else LikeObject.POST, desired); if (desired) "已点赞" else "已取消点赞" }
             }.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.ThumbUp, if (liked) "取消点赞" else "点赞", tint = if (liked) IOSLayout.blue else secondary, modifier = Modifier.size(18.dp))
                 Text(count?.let(::commentLikeCount) ?: "赞", fontSize = 14.sp, color = if (liked) IOSLayout.blue else secondary, modifier = Modifier.padding(start = 5.dp))
@@ -98,7 +96,10 @@ internal fun commentMetadata(timestamp: Long, region: String, format: PostTimest
         PostAuthorHeader(vm, post)
         Column(Modifier.padding(start = 48.dp)) {
             SelectionContainer { Column { ContentBlocksView(post.blocks, vm) } }
-            val metadata = commentMetadata(post.timestamp, post.ipAddress, if (route.kind == "subposts") PostTimestampFormat.SUBPOST else null)
+            val metadata = listOfNotNull(
+                post.floor.takeIf { it > 0 && route.kind != "subposts" }?.let { "${it}楼" },
+                commentMetadata(post.timestamp, post.ipAddress, if (route.kind == "subposts") PostTimestampFormat.SUBPOST else null).takeIf(String::isNotBlank)
+            ).joinToString(" · ")
             if (metadata.isNotBlank() || !offline && vm.account?.uid == post.author.id) Row(Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(metadata, fontSize = 12.sp, color = secondary, modifier = Modifier.weight(1f))
                 DeleteCommentAction(vm, post)
@@ -121,7 +122,7 @@ internal fun commentMetadata(timestamp: Long, region: String, format: PostTimest
 @Composable private fun DeleteCommentAction(vm: AppViewModel, post: Post) {
     val route = vm.route
     val subpost = route.kind == "subposts"
-    val fid = if (subpost) route.extra.substringAfter(':', "") else vm.data.thread?.forumId.orEmpty()
+    val fid = if (subpost) route.extra.split(':').getOrNull(1).orEmpty() else vm.data.thread?.forumId.orEmpty()
     val forum = if (subpost) route.title else vm.data.thread?.thread?.forum.orEmpty()
     if (route.kind !in setOf("thread", "subposts") || vm.account?.uid != post.author.id || post.author.id.toLongOrNull()?.let { it > 0 } != true || !subpost && post.floor <= 1 || fid.toLongOrNull()?.let { it > 0 } != true) return
     var confirm by remember(post.id, vm.account?.uid) { mutableStateOf(false) }

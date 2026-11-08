@@ -116,13 +116,8 @@ struct VoiceContent: Equatable, Codable, Sendable {
         localURL: URL? = nil,
         offlineOnly: Bool? = nil
     ) {
-        let normalizedMD5 = md5
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        guard normalizedMD5.utf8.count == 32,
-              normalizedMD5.utf8.allSatisfy(Self.isLowercaseHexDigit) else {
-            return nil
-        }
+        let trimmed = md5.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalizedMD5 = VoiceAudioURLPolicy.normalizedVoiceID(trimmed) else { return nil }
 
         self.md5 = normalizedMD5
         self.durationMilliseconds = max(durationMilliseconds, 0)
@@ -130,9 +125,6 @@ struct VoiceContent: Equatable, Codable, Sendable {
         self.offlineOnly = offlineOnly
     }
 
-    private static func isLowercaseHexDigit(_ byte: UInt8) -> Bool {
-        (48...57).contains(byte) || (97...102).contains(byte)
-    }
 }
 
 struct ImageContent: Equatable, Codable, Sendable {

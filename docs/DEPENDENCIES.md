@@ -2,18 +2,18 @@
 
 2026-10-26补充：本机已完成双端构建和Android测试，证据见VERIFICATION。新增XcodeGen2.46.0在统一工具箱；未新装SDK/JDK/Xcode或iOS运行时。Gradle下载了工程声明的构建/运行依赖。以下10月25日只读依赖快照保留；NOTICE提取90份归档、44条原文记录的结果另见ANDROID_NOTICE_INVENTORY。
 
-审查日期：2026-10-25。以下为本地工程当前声明及解析快照，**依赖图解析成功不等于编译、运行或许可逐行审计通过**。本次只读解析和缓存POM检查，没有安装组件、执行构建或测试。上游固定提交见 [UPSTREAM.md](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/docs/UPSTREAM.md)。
+审查日期：2026-10-25。以下为本地工程当前声明及解析快照，**依赖图解析成功不等于编译、运行或许可逐行审计通过**。本次只读解析和缓存POM检查，没有安装组件、执行构建或测试。上游固定提交见 [UPSTREAM.md](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/docs/UPSTREAM.md)。
 
 ## iOS
 
-- 唯一Swift Package声明：`https://github.com/apple/swift-protobuf.git`，精确版本 **1.38.1**，锁定revision `55d7a1cc5666b85c13464aea1c4b4a90feccb4c8`。来源：[project.yml](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/ios/project.yml)、[Package.resolved](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/ios/TiebaPure.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)。
-- 许可 **Apache-2.0 + Runtime Library Exception**，保留原完整正文；不能把例外扩展成Android Protobuf或所有Apache库的统一豁免。来源：[本机许可](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/ios/LICENSES/SwiftProtobuf-Apache-2.0.txt)、[上游1.38.1 LICENSE.txt](https://github.com/apple/swift-protobuf/blob/1.38.1/LICENSE.txt)。
-- SwiftUI/UIKit/Foundation/WebKit/AVFoundation/Photos/Security/SwiftData等来自Apple平台SDK，不是另行声明的开源Swift包；其SDK/系统API许可不因本项目GPL而改变。SwiftData采用弱链接兼容旧系统。此处未全面审查Apple SDK合同。[工程配置](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/ios/project.yml)。
-- Protobuf输入有28个 `.proto`，生成Swift源码已随上游提交；常规编译不必重新安装protoc。重新生成需python3/protoc/protoc-gen-swift 1.38.1；Android生成Java代码读取同一份 `ios/Protos`。[上游生成说明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/Protos/README.md)、[Android配置](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/app/build.gradle)。
+- 唯一Swift Package声明：`https://github.com/apple/swift-protobuf.git`，精确版本 **1.38.1**，锁定revision `55d7a1cc5666b85c13464aea1c4b4a90feccb4c8`。来源：[project.yml](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/ios/project.yml)、[Package.resolved](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/ios/TiebaPure.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)。
+- 许可 **Apache-2.0 + Runtime Library Exception**，保留原完整正文；不能把例外扩展成Android Protobuf或所有Apache库的统一豁免。来源：[本机许可](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/ios/LICENSES/SwiftProtobuf-Apache-2.0.txt)、[上游1.38.1 LICENSE.txt](https://github.com/apple/swift-protobuf/blob/1.38.1/LICENSE.txt)。
+- SwiftUI/UIKit/Foundation/WebKit/AVFoundation/Photos/Security/SwiftData等来自Apple平台SDK，不是另行声明的开源Swift包；其SDK/系统API许可不因本项目GPL而改变。SwiftData采用弱链接兼容旧系统。此处未全面审查Apple SDK合同。[工程配置](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/ios/project.yml)。
+- Protobuf输入有28个 `.proto`，生成Swift源码已随上游提交；常规编译不必重新安装protoc。重新生成需python3/protoc/protoc-gen-swift 1.38.1；Android生成Java代码读取同一份 `ios/Protos`。[上游生成说明](https://github.com/infinityf4p/TiebaPure-iOS/blob/5a87225190d6a79b1e3ad3b7d846edd407d416c7/Protos/README.md)、[Android配置](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/app/build.gradle)。
 
 ## Android声明与实际版本
 
-直接运行时依赖声明来源：[android/app/build.gradle](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/app/build.gradle)。
+直接运行时依赖声明来源：[android/app/build.gradle](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/app/build.gradle)。
 
 | 声明 | 此次解析版本 | 用途 |
 | --- | --- | --- |
@@ -39,14 +39,14 @@ Kotlin stdlib由插件自动加入，实际2.2.20。Okio最终3.9.0、Guava最�
 已成功运行（离线、退出码0、无FAILED节点）：
 
 ```sh
-cd '/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android'
+cd '/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android'
 source /Users/y/toolchains/env.sh
 ./gradlew --offline --no-daemon --console=plain -q :app:dependencies --configuration debugRuntimeClasspath
 ```
 
 从该配置去除仅 `(c)` 约束的重复行，按箭头右侧已选择版本去重，得到 **129个解析坐标节点**。其中包含BOM、Kotlin多平台selector与Android/JVM实际变体，所以129不是APK内库文件数，也不是129份独立打包代码。Debug工具依赖已包含；**没有把这张Debug表当成Release依赖图或APK内容审计**。
 
-逐个读取现有 `/Users/y/.gradle/caches/modules-2/files-2.1/<group>/<name>/<version>/<hash>/*.pom` 的 `licenses`；缺省时递归读取缓存父POM。本次129个节点均取得声明：128个Apache-2.0，1个BSD-3-Clause（protobuf-java）。这只是发布者元数据的核对；未逐行追踪源码、native对象、嵌入第三方代码、NOTICE及最终APK合并结果。完整许可与剩余事项见 [LICENSE_AUDIT.md](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/docs/LICENSE_AUDIT.md)。
+逐个读取现有 `/Users/y/.gradle/caches/modules-2/files-2.1/<group>/<name>/<version>/<hash>/*.pom` 的 `licenses`；缺省时递归读取缓存父POM。本次129个节点均取得声明：128个Apache-2.0，1个BSD-3-Clause（protobuf-java）。这只是发布者元数据的核对；未逐行追踪源码、native对象、嵌入第三方代码、NOTICE及最终APK合并结果。完整许可与剩余事项见 [LICENSE_AUDIT.md](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/docs/LICENSE_AUDIT.md)。
 
 | 精确解析坐标 | POM许可元数据 | 本机证据 |
 | --- | --- | --- |
@@ -184,8 +184,8 @@ source /Users/y/toolchains/env.sh
 
 | 坐标/工具 | 当前配置版本 | 范围/证据 |
 | --- | --- | --- |
-| Gradle wrapper | 8.14.3-all | [wrapper](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/gradle/wrapper/gradle-wrapper.properties) |
-| com.android.application / com.android.tools.build:gradle | 8.13.0 | [插件](/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/build.gradle) |
+| Gradle wrapper | 8.14.3-all | [wrapper](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/gradle/wrapper/gradle-wrapper.properties) |
+| com.android.application / com.android.tools.build:gradle | 8.13.0 | [插件](/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/build.gradle) |
 | org.jetbrains.kotlin.android / Kotlin Compose plugin | 2.2.20 | 同上 |
 | com.google.protobuf Gradle plugin | 0.9.4 | 同上 |
 | com.google.protobuf:protoc | 3.25.5 | 代码生成器声明，非protobuf-java运行库 |

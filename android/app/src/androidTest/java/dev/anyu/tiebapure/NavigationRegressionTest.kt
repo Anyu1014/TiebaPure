@@ -89,6 +89,24 @@ class NavigationRegressionTest {
             assertFalse(vm.loading)
         }
     }
+    @Test fun backFromThreadRestoresTheForumCategoryAndLoadedPagesWithoutRefreshing() {
+        val vm = start()
+        inst.runOnMainSync { vm.navigate(Route("forum", "旅行", extra = "publish"), root = true) }
+        eventually { !vm.loading && vm.data.threads.isNotEmpty() }
+        inst.runOnMainSync { vm.loadNextPage() }
+        eventually { !vm.loading }
+        val data = vm.data
+        val page = vm.page
+        inst.runOnMainSync {
+            vm.navigate(Route("thread", data.threads.first().id))
+            assertTrue(vm.back())
+            assertSame("Back must retain all loaded forum rows", data, vm.data)
+            assertEquals("publish", vm.route.extra)
+            assertEquals(1, vm.sort)
+            assertEquals(page, vm.page)
+            assertFalse(vm.loading)
+        }
+    }
     @Test fun everyPageUsesTheSameCompactToolbarAsTheThreadPage() {
         val activity = inst.startActivitySync(Intent().setClassName(inst.targetContext, MainActivity::class.java.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) as MainActivity
         lateinit var vm: AppViewModel
@@ -106,7 +124,7 @@ class NavigationRegressionTest {
             if (height != referenceHeight) { referenceHeight = height; stableSince = SystemClock.uptimeMillis() }
             SystemClock.uptimeMillis() - stableSince >= 1_000
         }
-        val routes = listOf(Route("home") to "首页", Route("forums") to "进吧", Route("settings") to "设置", Route("about") to "关于 TiebaLite", Route("forum", "旅行") to "旅行吧", Route("subposts", "9107183498", "奥比交易", "150670290200:1") to "楼中楼")
+        val routes = listOf(Route("home") to "首页", Route("forums") to "进吧", Route("settings") to "设置", Route("about") to "关于 TiebaPure", Route("forum", "旅行") to "旅行吧", Route("subposts", "9107183498", "奥比交易", "150670290200:1") to "楼中楼")
         for ((route, title) in routes) {
             val drawn = java.util.concurrent.CountDownLatch(1)
             inst.runOnMainSync {

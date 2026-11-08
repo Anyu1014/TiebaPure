@@ -33,6 +33,7 @@ struct RootView: View {
             await signAutomaticallyIfNeeded()
         }
         .onChange(of: scenePhase) { newPhase in
+            environment.autoReplyCoordinator.sceneChanged(newPhase)
             let previousPhase = lastScenePhase
             lastScenePhase = newPhase
             // "First open of the day" also covers returning from the
@@ -41,6 +42,7 @@ struct RootView: View {
             Task { await signAutomaticallyIfNeeded() }
         }
         .onReceive(environment.accountStore.accountDidChange) { newAccount in
+            if account?.sessionIdentity != newAccount?.sessionIdentity { environment.autoReplyCoordinator.pause() }
             accountTransitionGeneration &+= 1
             let generation = accountTransitionGeneration
             accountTransitionTask?.cancel()
@@ -64,6 +66,7 @@ struct RootView: View {
                 await TiebaImagePipeline.shared.releaseDecodedImageCache()
             }
         }
+        .background(AutoReplyPromptHost(coordinator: environment.autoReplyCoordinator, account: account))
         .onOpenURL { url in
             guard let route = ExternalRoute.parse(url) else { return }
             externalRoute = route
@@ -194,6 +197,7 @@ struct RootView: View {
         guard Task.isCancelled == false,
               generation == accountTransitionGeneration else { return }
         account = newAccount
+        environment.autoReplyCoordinator.accountChanged(newAccount)
         if newAccount?.sessionIdentity != expiringSession {
             expiringSession = nil
         }
@@ -287,19 +291,26 @@ private struct ExternalRouteView: View {
 }
 
 private struct MainTabView: View {
+    @EnvironmentObject private var environment: AppEnvironment
     let account: Account?
+    @State private var nativeTabBarState = NativeRootTabBarState()
     @State private var selectedTab: RootTab = .home
     @State private var homeRefreshToken = 0
 
     var body: some View {
         Group {
-            if #available(iOS 18.0, *) {
+            if #available(iOS 26.0, *) {
+                modernTabView
+                    .tabBarMinimizeBehavior(.never)
+            } else if #available(iOS 18.0, *) {
                 modernTabView
             } else {
                 legacyTabView
             }
         }
         .environment(\.floatingRootTabSelection, tabSelection)
+        .environment(\.floatingRootTabAccount, account)
+        .environment(\.nativeRootTabBarState, nativeTabBarState)
         .background {
             if #unavailable(iOS 26.0) {
                 TabSelectionObserver {
@@ -321,7 +332,7 @@ private struct MainTabView: View {
             }
 
             Tab("我的", systemImage: "person.circle", value: RootTab.me) {
-                MeView(account: account)
+                MeView(account: account, unread: environment.messageUnread)
             }
         }
     }
@@ -340,7 +351,7 @@ private struct MainTabView: View {
                 }
                 .tag(RootTab.forums)
 
-            MeView(account: account)
+            MeView(account: account, unread: environment.messageUnread)
                 .tabItem {
                     Label("我的", systemImage: "person.circle")
                 }
@@ -349,7 +360,6 @@ private struct MainTabView: View {
     }
 
     private var tabSelection: Binding<RootTab> {
-        if #available(iOS 26.0, *) { return $selectedTab }
         return Binding(
             get: { selectedTab },
             set: { newValue in

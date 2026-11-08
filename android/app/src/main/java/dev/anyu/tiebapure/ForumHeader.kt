@@ -1,6 +1,9 @@
 package dev.anyu.tiebapure
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +21,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.*
+
+@Composable fun ForumPinnedToggle(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val arrowRotation by animateFloatAsState(if (expanded) 180f else 0f, tween(240, easing = FastOutSlowInEasing), label = "pinned-arrow")
+    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).heightIn(min = 44.dp)
+        .testTag("forum-pinned-threads-toggle").semantics { stateDescription = if (expanded) "已展开" else "已收起" }
+        .clickable(role = Role.Button, onClickLabel = if (expanded) "收起${count}条置顶内容" else "展开${count}条置顶内容", onClick = onToggle)
+        .padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(TiebaIcons.Pin, null, Modifier.size(17.dp), tint = secondary)
+        Text("置顶内容", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Text(count.toString(), fontSize = 12.sp, color = secondary)
+        Spacer(Modifier.weight(1f))
+        Icon(TiebaIcons.ChevronDown, null, Modifier.size(14.dp).rotate(arrowRotation), tint = secondary)
+    }
+    HorizontalDivider(thickness = 0.5.dp)
+}
 
 @Composable fun ForumCategoryPicker(vm: AppViewModel) {
     val route = vm.route

@@ -79,6 +79,14 @@ final class ContentSubmissionRequestFactoryTests: XCTestCase {
         }
     }
 
+    func testThreadImagesUseTrustedHTMLAndEscapeTextWithoutAcceptingInjectedIDs() throws {
+        let image = TiebaAppUploadedImage(picID: "fixture_pic_1", pixelWidth: 1, pixelHeight: 1)
+        let content = try TiebaContentSubmissionRequestFactory.webThreadContent(body: "<标题>&\n正文", uploadedImages: [image])
+        XCTAssertEqual(content, "&lt;标题&gt;&amp;<br>正文<br><img class=\"BDE_Image\" src=\"https://tiebapic.baidu.com/forum/pic/item/fixture_pic_1.jpg\" width=\"1\" height=\"1\">")
+        XCTAssertThrowsError(try TiebaContentSubmissionRequestFactory.webThreadContent(body: "", uploadedImages: [TiebaAppUploadedImage(picID: "../../evil\" onerror=alert(1)", pixelWidth: 1, pixelHeight: 1)]))
+        XCTAssertEqual(try TiebaContentSubmissionRequestFactory.webThreadContent(body: "<原文>", uploadedImages: []), "<原文>")
+    }
+
     func testWebThreadFieldsAndHeadersPreserveTextAndMinimizeCookies() throws {
         let fields = try TiebaContentSubmissionRequestFactory.webThreadFields(
             account: Self.account,
@@ -666,6 +674,23 @@ final class ContentSubmissionNetworkIntegrationTests: XCTestCase {
             }
             SubmissionURLProtocol.remove(id: harness.id)
         }
+    }
+
+    func testImageThreadUploadsBeforeItsSingleMutationAndKeepsImageWhenBodyIsEmpty() async throws {
+        let bootstrap = CountingSubmissionPostingBootstrap(result: Self.bootstrap)
+        let harness = makeAPI(mode: .finalResponse(Data(#"{"result":"1","tid":"7001","pid":"7002"}"#.utf8)), postingBootstrap: bootstrap)
+        defer { SubmissionURLProtocol.remove(id: harness.id) }
+        var request = Self.newThreadRequest(body: "")
+        request.images = try Self.imageReplyRequest().images
+        let receipt = try await harness.api.submitContent(account: Self.account, request: request)
+        XCTAssertEqual(receipt.threadID, 7001)
+        XCTAssertEqual(SubmissionURLProtocol.paths(id: harness.id), ["/c/s/uploadPicture", "/c/s/login", "/f/commit/thread/add"])
+        let mutation = try XCTUnwrap(SubmissionURLProtocol.records(id: harness.id).last)
+        let fields = try Self.formFields(from: mutation)
+        XCTAssertTrue(fields["content", default: ""].contains("https://tiebapic.baidu.com/forum/pic/item/fixture_pic_1.jpg"))
+        XCTAssertTrue(fields["content", default: ""].contains("width=\"1\" height=\"1\""))
+        let calls = await bootstrap.callCount()
+        XCTAssertEqual(calls, 1)
     }
 
     func testNewThreadUsesSingleHTTPSWebFormWithMinimalCookies() async throws {

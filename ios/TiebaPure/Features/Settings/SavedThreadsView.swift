@@ -162,7 +162,7 @@ struct SavedThreadsView: View {
             isPresented: $showsBackupExporter,
             document: backupDocument,
             contentType: .tiebaPureBackup,
-            defaultFilename: "TiebaLite-本地保存"
+            defaultFilename: "TiebaPure-本地保存"
         ) { result in
             backupDocument = nil
             if case let .failure(error) = result {

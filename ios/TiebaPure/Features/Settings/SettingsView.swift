@@ -26,6 +26,14 @@ struct SettingsView: View {
                 .pickerStyle(.inline)
                 .labelsHidden()
                 .accessibilityIdentifier("appearance-picker")
+                Toggle("底栏自动收缩", isOn: Binding(get: { appearanceStore.bottomBarAutoCollapse }, set: appearanceStore.setBottomBarAutoCollapse))
+                    .accessibilityIdentifier("settings-bottom-bar-auto-collapse")
+                Toggle("显示底栏文字", isOn: Binding(get: { appearanceStore.bottomBarShowsLabels }, set: appearanceStore.setBottomBarShowsLabels))
+                    .accessibilityIdentifier("settings-bottom-bar-labels")
+                Picker("底栏收缩后位置", selection: Binding(get: { appearanceStore.bottomBarPosition }, set: appearanceStore.setBottomBarPosition)) {
+                    ForEach(BottomBarPosition.allCases) { position in Text(position.title).tag(position) }
+                }
+                .accessibilityIdentifier("settings-bottom-bar-position")
             } header: {
                 HStack(alignment: .firstTextBaseline, spacing: TiebaPureTheme.Spacing.sm) {
                     Text("显示模式")
@@ -43,7 +51,7 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity)
             } footer: {
-                Text("选择后会立即应用；跟随系统会随 iPhone 的外观设置自动切换。")
+                Text("选择后会立即应用；上滑浏览时收缩为头像，快速下滑时展开，慢速下滑保持收缩。")
             }
 
             Section {
@@ -117,8 +125,12 @@ struct SettingsView: View {
                     .disabled(forumSignCoordinator.isRunning)
                     .accessibilityHint("立即为关注的贴吧签到")
                     .accessibilityIdentifier("settings-sign-now-button")
+                    NavigationLink { AutoReplySettingsView(account: account, coordinator: environment.autoReplyCoordinator) } label: {
+                        Label { Text("自动回复") } icon: { Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(.blue) }
+                    }
+                    .accessibilityIdentifier("settings-auto-reply-entry")
                 } header: {
-                    Text("签到")
+                    Text("自动化")
                 } footer: {
                     Text(signFooterText)
                 }

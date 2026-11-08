@@ -59,7 +59,7 @@ final class ContentComposerPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             ContentComposerPolicy.remainingImageSlots(currentCount: 0, kind: .newThread),
-            0
+            ContentSubmissionPolicy.maximumImages
         )
     }
 
@@ -131,7 +131,7 @@ final class ContentComposerPolicyTests: XCTestCase {
         }
     }
 
-    func testNewThreadRejectsImagesBeforeAnyNetworkWrite() throws {
+    func testNewThreadAcceptsImagesWithTheSameValidationAsReplies() throws {
         let data = try XCTUnwrap(Data(base64Encoded:
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
         ))
@@ -146,10 +146,8 @@ final class ContentComposerPolicyTests: XCTestCase {
                 mimeType: "image/png"
             )]
         )
-        XCTAssertEqual(
-            ContentComposerPolicy.validationMessage(for: request),
-            "当前发布新主题仅支持文字和贴吧表情。"
-        )
+        XCTAssertNil(ContentComposerPolicy.validationMessage(for: request))
+        XCTAssertNoThrow(try ContentSubmissionPolicy.validateForNetwork(request))
     }
 
     func testRiskAcknowledgementIsExplicitAndPersistent() throws {

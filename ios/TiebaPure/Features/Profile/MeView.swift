@@ -2,6 +2,11 @@ import SwiftUI
 
 struct MeView: View {
     let account: Account?
+    @ObservedObject var unread: MessageUnreadState
+
+    @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.floatingRootTabSelection) private var rootSelection
 
     @ObservedObject private var browsingHistoryStore = BrowsingHistoryStore.shared
     @ObservedObject private var blocklistStore = BlocklistStore.shared
@@ -52,13 +57,23 @@ struct MeView: View {
                         Button {
                             navigationPath.append(.messages)
                         } label: {
-                            Label("消息", systemImage: "bell")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
+                            Label {
+                                Text("消息")
+                                    .overlay(alignment: .topTrailing) {
+                                        if hasUnreadMessages {
+                                            UnreadBadge().offset(x: 8, y: -3)
+                                        }
+                                    }
+                            } icon: {
+                                Image(systemName: "bell")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("消息")
-                        .accessibilityHint("查看回复我的和@我的消息")
+                        .accessibilityValue(hasUnreadMessages ? "有未读消息" : "")
+                        .accessibilityHint("查看回复我的、@我的和私信消息")
                         .accessibilityIdentifier("me-messages-entry")
 
                         Button {
@@ -104,6 +119,15 @@ struct MeView: View {
                 }
 
                 Section("浏览") {
+                    Button { navigationPath.append(.accountLikes) } label: {
+                        Label("我的点赞", systemImage: "hand.thumbsup")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("查看云端点赞的主帖和回帖")
+                    .accessibilityIdentifier("account-likes-entry")
+
                     Button {
                         navigationPath.append(.threadFavorites)
                     } label: {
@@ -153,7 +177,7 @@ struct MeView: View {
                     Button {
                         navigationPath.append(.about)
                     } label: {
-                        Label("关于 TiebaLite", systemImage: "info.circle")
+                        Label("关于 TiebaPure", systemImage: "info.circle")
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
@@ -164,6 +188,10 @@ struct MeView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .accessibilityHidden(true)
+            }
+            .task(id: badgeRefreshSession) {
+                guard let account, badgeRefreshSession != nil else { return }
+                await unread.refreshWhileVisible(account: account, environment: environment)
             }
             .navigationTitle("我的")
             .navigationBarTitleDisplayMode(.inline)
@@ -193,7 +221,17 @@ struct MeView: View {
                 }
             }
         }
-        .floatingRootTabBar(isVisible: showsFloatingTabBar)
+        .floatingRootTabBar(tab: .me, isVisible: showsFloatingTabBar)
+    }
+
+    private var hasUnreadMessages: Bool {
+        !unread.tabs(for: account).isEmpty
+    }
+
+    private var badgeRefreshSession: AccountSessionIdentity? {
+        guard scenePhase == .active, navigationPath.isEmpty,
+              rootSelection?.wrappedValue == .me else { return nil }
+        return account?.sessionIdentity
     }
 
     private var showsFloatingTabBar: Bool {
@@ -231,7 +269,7 @@ struct MeView: View {
         switch route {
         case .messages:
             if let account {
-                MessagesView(account: account, openThreadInParent: openThread)
+                MessagesView(account: account, unread: unread, openThreadInParent: openThread)
             }
         case .followedForums:
             if let account {
@@ -243,6 +281,8 @@ struct MeView: View {
                     openUser(user, sourceThreadID: nil)
                 })
             }
+        case .accountLikes:
+            AccountLikesView(account: account, openThreadInParent: openThread)
         case .threadFavorites:
             ThreadFavoritesView(account: account, openThreadInParent: openThread)
         case .browsingHistory:
@@ -317,6 +357,7 @@ enum MeNavigationRoute: Hashable {
     case messages
     case followedForums
     case followedUsers
+    case accountLikes
     case threadFavorites
     case browsingHistory
     case settings

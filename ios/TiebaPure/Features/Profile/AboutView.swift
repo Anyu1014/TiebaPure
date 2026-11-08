@@ -19,18 +19,18 @@ struct AboutView: View {
             }
 
             Section("开源与许可") {
-                Link("查看 TiebaLite 源码", destination: sourceURL)
+                Link("查看 TiebaPure 源码", destination: sourceURL)
                     .accessibilityHint("在浏览器打开本应用源码")
 
                 NavigationLink {
                     OpenSourceLicenseView(
-                        title: "TiebaLite",
+                        title: "TiebaPure",
                         resourceName: "LICENSE",
                         resourceExtension: nil,
                         fallbackURL: gplURL
                     )
                 } label: {
-                    LabeledContent("TiebaLite", value: "GPL-3.0-only")
+                    LabeledContent("TiebaPure", value: "GPL-3.0-only")
                 }
 
                 NavigationLink {
@@ -45,7 +45,7 @@ struct AboutView: View {
                 }
             }
         }
-        .navigationTitle("关于 TiebaLite")
+        .navigationTitle("关于 TiebaPure")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenInteractiveNavigationPop()
     }

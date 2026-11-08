@@ -206,12 +206,12 @@ enum PostMapper {
         let posts = data.postList
             .filter(TiebaContentFilter.shouldKeep(post:))
             .map { post(from: $0, usersByID: usersByID, threadID: data.thread.id) }
-            .map { enrichIPIfNeeded($0, thread: thread) }
+            .map { applyingThreadCounters(enrichIPIfNeeded($0, thread: thread), thread: thread) }
         let mainPost = rawMainPost.map {
-            enrichIPIfNeeded(
+            applyingThreadCounters(enrichIPIfNeeded(
                 post(from: $0, usersByID: usersByID, threadID: data.thread.id),
                 thread: thread
-            )
+            ), thread: thread)
         }
 
         return ThreadPage(
@@ -224,6 +224,14 @@ enum PostMapper {
             hasMore: data.page.currentPage < data.page.totalPage || data.page.hasMore_p != 0,
             isCollected: data.thread.collectStatus != 0
         )
+    }
+
+    private static func applyingThreadCounters(_ post: Post, thread: ThreadSummary) -> Post {
+        guard post.floor == 1 else { return post }
+        var result = post
+        result.likeCount = thread.likeCount
+        result.isLiked = thread.isLiked
+        return result
     }
 
     private static func parseSize(

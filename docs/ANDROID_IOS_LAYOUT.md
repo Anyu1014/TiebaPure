@@ -1,6 +1,6 @@
 # Android 的 iOS 布局与 Anyu 磨砂移植
 
-2026-10-26。按用户指定，布局参照本工作区当前 iOS 源码及用户提供的截图，材质使用 Anyu/Velorah 的磨砂风格。本次只修改 TiebaLite，Anyu 源项目只读，没有复制其账号、配置、服务器代码或私有数据。
+2026-10-26。按用户指定，布局参照本工作区当前 iOS 源码及用户提供的截图，材质使用 Anyu/Velorah 的磨砂风格。本次只修改 TiebaPure，Anyu 源项目只读，没有复制其账号、配置、服务器代码或私有数据。
 
 ## 已实现的布局
 
@@ -37,9 +37,9 @@ Android12/API31及以上使用实际GPU背景模糊；API26–30使用实色磨�
 - `logs/android-layout-storage-tests.log`：隔离命名空间的5项存储设备测试通过；包含加密/备份排除、坏备份、大正文及校验。
 - `logs/android-ui-checks.json`：专用Android35 ARM64 AVD实测。1080×2400、density2.625，列表视口为`[0,0,1080,2400]`；胶囊测量约279.62dp，符合280dp的像素取整；单图示例932×466，比例2:1。
 - `logs/android-ui-driver.log` / `android-ui-*.xml/png`：实际切换根页、设置/阅读页、浅深色、帖子排序；关闭“允许发帖”时，在登录/发布之前拦截，之后恢复测试前状态。测试只操作专用AVD本机偏好。
-- 右侧 `previews/android-layout.html` 展示原生模拟器截图；iOS的 `previews/ios-layout.html` 仍是布局示意，不冒充原生iOS运行结果。
+- 右侧本地预览页（`.cache/previews/`，截图类临时产物，不随仓库分发）中，Android 展示原生模拟器截图；iOS 仍是布局示意，不冒充原生iOS运行结果。
 
-验证包在 `/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/app/build/outputs/apk/debug/app-debug.apk`，使用Debug签名，仅在专用AVD安装。工具：JDK21.0.12.1、Gradle8.14.3、AGP8.13.0、Kotlin2.2.20、Compose1.9.2、SDK/BuildTools36、Emulator37.2.12（API35）。本轮没有新装组件或新增依赖。
+验证包在 `/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/app/build/outputs/apk/debug/app-debug.apk`，使用Debug签名，仅在专用AVD安装。工具：JDK21.0.12.1、Gradle8.14.3、AGP8.13.0、Kotlin2.2.20、Compose1.9.2、SDK/BuildTools36、Emulator37.2.12（API35）。本轮没有新装组件或新增依赖。
 
 ## 尚不能作出的结论
 
@@ -49,4 +49,4 @@ Android12/API31及以上使用实际GPU背景模糊；API26–30使用实色磨�
 
 ## 1.0/build61 后续更新
 
-关于页显示TiebaLite/1.0/Anyu，GPL项目条目也显示TiebaLite，源码链接本仓库。新增顶部下拉刷新与首页返回缓存；评论区使用头像、等级、右侧点赞、日期地区和楼中楼灰色卡片。独立wire fixture及旧离线备份兼容检查位于CommentPresentationTest；预览数据缺失时不伪造等级、地区或点赞数。iOS26/27最终采用系统原生标签栏，旧版自定义胶囊尺寸不再是新版原生栏的像素验收指标。
+关于页显示TiebaPure/1.0/Anyu，GPL项目条目也显示TiebaPure，源码链接本仓库。新增顶部下拉刷新与首页返回缓存；评论区使用头像、等级、右侧点赞、日期地区和楼中楼灰色卡片。独立wire fixture及旧离线备份兼容检查位于CommentPresentationTest；预览数据缺失时不伪造等级、地区或点赞数。iOS26/27最终采用系统原生标签栏，旧版自定义胶囊尺寸不再是新版原生栏的像素验收指标。

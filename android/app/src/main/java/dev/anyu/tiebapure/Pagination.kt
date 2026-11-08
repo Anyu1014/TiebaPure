@@ -9,15 +9,51 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.pulltorefresh.*
 
+internal fun List<Post>.inReplyOrder(sort: Int): List<Post> {
+    val main = filter { it.floor == 1 }
+    val replies = filter { it.floor != 1 }
+    return main + when (sort) {
+        0 -> replies.sortedBy { it.floor }
+        1 -> replies.sortedByDescending { it.floor }
+        else -> replies
+    }
+}
+
+internal fun Thread.withThreadCounters(updated: Thread): Thread = copy(
+    replies = updated.replies,
+    // A matching reply has its own count, independent of its parent thread.
+    likes = if (matchedPost.isEmpty()) updated.likes ?: likes else likes
+)
+
+internal fun ScreenData.withThreadCounters(updated: Thread): ScreenData = copy(
+    threads = threads.map { if (it.id == updated.id) it.withThreadCounters(updated) else it },
+    thread = thread?.let { if (it.thread.id == updated.id) it.copy(thread = it.thread.copy(replies = updated.replies, likes = updated.likes)) else it }
+)
+
+internal fun ScreenData.replacingComments(previous: ScreenData): ScreenData {
+    val freshMain = posts.firstOrNull { it.floor == 1 }
+    val main = previous.posts.filter { it.floor == 1 }.ifEmpty { listOfNotNull(freshMain) }.map {
+        it.copy(likes = thread?.thread?.likes ?: it.likes, liked = freshMain?.liked ?: it.liked)
+    }
+    val updatedPosts = main + posts.filter { it.floor != 1 }
+    return copy(
+        posts = updatedPosts,
+        thread = thread?.let { incoming ->
+            incoming.copy(thread = previous.thread?.thread?.copy(replies = incoming.thread.replies, likes = incoming.thread.likes) ?: incoming.thread, posts = updatedPosts)
+        }
+    )
+}
+
 internal fun ScreenData.appendTo(previous: ScreenData): ScreenData {
     val merged = copy(
         threads = (previous.threads + threads).distinctBy { it.id to it.matchedPost },
         posts = (previous.posts + posts).distinctBy { it.id },
-        users = (previous.users + users).distinctBy { it.id }
+        users = (previous.users + users).distinctBy { it.id },
+        likes = likes?.let { it.copy(items = (previous.likes?.items.orEmpty() + it.items).distinctBy { item -> item.id }) }
     )
     // shortcut: a fully blocked page stops pagination; track server cursors if hidden pages must be skipped.
     val progressed = merged.threads.size > previous.threads.size || merged.posts.size > previous.posts.size || merged.users.size > previous.users.size
-    return merged.copy(hasMore = hasMore && progressed)
+    return merged.copy(hasMore = hasMore && (likes != null || progressed))
 }
 
 internal fun threadReadingPosition(index: Int, postIds: List<String>, pages: Map<String, Int>, fallbackPage: Int): Pair<Int, Int> {

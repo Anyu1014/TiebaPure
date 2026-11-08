@@ -4297,7 +4297,7 @@ struct FullScreenImageView: View {
             } catch TiebaImageDownloadError.photoLibraryAccessDenied {
                 downloadNotice = ImageDownloadNotice(
                     title: "无法保存图片",
-                    message: "请在系统设置中允许 TiebaLite 添加照片后重试。"
+                    message: "请在系统设置中允许 TiebaPure 添加照片后重试。"
                 )
             } catch {
                 downloadNotice = ImageDownloadNotice(

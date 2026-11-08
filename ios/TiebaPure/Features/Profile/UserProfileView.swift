@@ -63,6 +63,7 @@ struct UserProfileView: View {
     @State private var selectedRelationshipKind: UserRelationshipKind?
     @State private var navigationSourceLifecycle = NavigationSourceLifecycleState()
     @State private var showsProfileEditor = false
+    @State private var showsPrivateMessage = false
     @State private var pendingProfileEditRequest: UserProfileEditRequest?
 
     var body: some View {
@@ -118,6 +119,16 @@ struct UserProfileView: View {
                     onNeedsRefresh: requestReadOnlyProfileRefresh
                 )
                 .environmentObject(environment)
+            }
+        }
+        .navigationDestination(isPresented: $showsPrivateMessage) {
+            if let account, let profile {
+                PrivateMessagesView(account: account, recipient: profile.user)
+                    .id(account.sessionIdentity)
+                    .id(profile.user.id)
+                    .navigationTitle("私信")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .interactiveNavigationPopStateSync { showsPrivateMessage = false }
             }
         }
         .navigationDestination(isPresented: threadIsActive) {
@@ -179,6 +190,7 @@ struct UserProfileView: View {
             selectedForum = nil
             selectedRelationshipKind = nil
             showsProfileEditor = false
+            showsPrivateMessage = false
             pendingProfileEditRequest = nil
             Task { await reload() }
         }
@@ -227,6 +239,7 @@ struct UserProfileView: View {
                 isPresentingLocalDestination: selectedThread != nil
                     || selectedForum != nil
                     || selectedRelationshipKind != nil
+                    || showsPrivateMessage
             ) else { return }
             cancelRequests()
             requestGeneration += 1
@@ -242,6 +255,10 @@ struct UserProfileView: View {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 UserProfileHeader(
                     profile: profile,
+                    onSendMessage: {
+                        guard account != nil else { userActionError = "请先登录后再发私信。"; return }
+                        showsPrivateMessage = true
+                    },
                     onOpenRelationship: { selectedRelationshipKind = $0 },
                     onEditProfile: UserProfileManagementPolicy.canEdit(
                         profile: profile,
@@ -1170,14 +1187,17 @@ private struct UserProfileEditSheet: View {
     }
 }
 
-private struct UserProfileHeader: View {
+struct UserProfileHeader: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @Environment(\.userProfileFollowAction) private var followAction
 
     let profile: UserProfile
+    let onSendMessage: () -> Void
     let onOpenRelationship: (UserRelationshipKind) -> Void
     let onEditProfile: (() -> Void)?
+    @State private var copiedID = false
+    @State private var compactActions = false
 
     private enum Layout {
         static let avatarSize: CGFloat = 56
@@ -1226,6 +1246,11 @@ private struct UserProfileHeader: View {
         .padding(.top, TiebaPureTheme.Spacing.sm)
         .padding(.bottom, TiebaPureTheme.Spacing.xxs)
         .background(Color(uiColor: .systemBackground))
+        .background(GeometryReader { geometry in
+            Color.clear
+                .onAppear { compactActions = geometry.size.width < 400 }
+                .onChange(of: geometry.size.width) { compactActions = $0 < 400 }
+        })
     }
 
     @ViewBuilder
@@ -1248,9 +1273,8 @@ private struct UserProfileHeader: View {
                 identitySummary
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
-
                 if showsProfileAction {
-                    profileAction
+                    profileAction.fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
@@ -1267,23 +1291,46 @@ private struct UserProfileHeader: View {
 
     private var identitySummary: some View {
         VStack(alignment: .leading, spacing: TiebaPureTheme.Spacing.xxs) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: TiebaPureTheme.Spacing.xs) {
-                    profileName
-                    levelBadge
-                }
-                VStack(alignment: .leading, spacing: TiebaPureTheme.Spacing.xxs) {
-                    profileName
-                    levelBadge
-                }
-            }
+            nameAndLevel
+            identityMetadata
+        }
+    }
 
-            if identityMetadataItems.isEmpty == false {
-                ProfileMetadataView(
-                    items: identityMetadataItems,
-                    accessibilityIdentifier: "user-profile-metadata"
-                )
+    private var nameAndLevel: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: TiebaPureTheme.Spacing.xs) {
+                profileName
+                levelBadge
             }
+            VStack(alignment: .leading, spacing: TiebaPureTheme.Spacing.xxs) {
+                profileName
+                levelBadge
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var identityMetadata: some View {
+        if !identityMetadataItems.isEmpty {
+            ProfileMetadataView(items: identityMetadataItems, accessibilityIdentifier: "user-profile-metadata", singleLine: !dynamicTypeSize.isAccessibilitySize)
+                .padding(.trailing, profile.tiebaID.isEmpty ? 0 : 28)
+                .overlay(alignment: .trailing) {
+                    if !profile.tiebaID.isEmpty {
+                        Button {
+                            UIPasteboard.general.string = profile.tiebaID
+                            copiedID = true
+                        } label: {
+                            Image(systemName: copiedID ? "checkmark" : "doc.on.doc")
+                                .font(.subheadline)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(copiedID ? "已复制用户ID" : "复制用户ID")
+                        .accessibilityIdentifier("user-profile-copy-id")
+                        .padding(.horizontal, -8)
+                    }
+                }
         }
     }
 
@@ -1320,7 +1367,16 @@ private struct UserProfileHeader: View {
         if let onEditProfile {
             editProfileButton(action: onEditProfile)
         } else if profile.isCurrentUser == false {
-            followButton
+            HStack(spacing: TiebaPureTheme.Spacing.xs) {
+                Button("发私信", action: onSendMessage)
+                    .font((compactActions ? Font.caption : .subheadline).weight(.semibold))
+                    .frame(minWidth: compactActions ? 48 : 60, minHeight: 44)
+                    .foregroundStyle(TiebaPureTheme.ColorToken.primaryAccent)
+                    .background(TiebaPureTheme.ColorToken.primaryAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: TiebaPureTheme.Radius.card, style: .continuous))
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("user-profile-message-button")
+                followButton
+            }
         }
     }
 
@@ -1348,7 +1404,7 @@ private struct UserProfileHeader: View {
                 } else {
                     if profile.isFollowed {
                         Label("已关注", systemImage: "checkmark")
-                            .font(.subheadline.weight(.semibold))
+                            .font((compactActions ? Font.caption : .subheadline).weight(.semibold))
                     } else {
                         HStack(spacing: TiebaPureTheme.Spacing.xxs) {
                             Image(systemName: "plus")
@@ -1356,11 +1412,11 @@ private struct UserProfileHeader: View {
                             Text("关注")
                                 .foregroundStyle(.primary)
                         }
-                        .font(.subheadline.weight(.semibold))
+                        .font((compactActions ? Font.caption : .subheadline).weight(.semibold))
                     }
                 }
             }
-            .frame(minWidth: Layout.actionMinWidth, minHeight: 44)
+            .frame(minWidth: compactActions ? 60 : Layout.actionMinWidth, minHeight: 44)
             .padding(.horizontal, TiebaPureTheme.Spacing.xxs)
         }
         .buttonStyle(.plain)
@@ -1450,10 +1506,13 @@ enum UserProfileMetadataText {
 private struct ProfileMetadataView: View {
     let items: [String]
     let accessibilityIdentifier: String
+    var singleLine = false
 
     var body: some View {
         Text(items.joined(separator: "  ·  "))
             .font(.subheadline)
+            .lineLimit(singleLine ? 1 : nil)
+            .minimumScaleFactor(singleLine ? 0.7 : 1)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .combine)

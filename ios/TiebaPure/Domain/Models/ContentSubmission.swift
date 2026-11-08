@@ -179,7 +179,6 @@ enum ContentSubmissionValidationError: Error, Equatable, LocalizedError {
     case tooManyImages(limit: Int)
     case imageTooLarge(limit: Int)
     case invalidImage
-    case imagesUnsupportedForNewThread
 
     var errorDescription: String? {
         switch self {
@@ -201,8 +200,6 @@ enum ContentSubmissionValidationError: Error, Equatable, LocalizedError {
             return "单张图片不能超过 \(ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file))。"
         case .invalidImage:
             return "所选图片无法读取，请重新选择。"
-        case .imagesUnsupportedForNewThread:
-            return "当前发布新主题仅支持文字和贴吧表情。"
         }
     }
 }
@@ -281,9 +278,6 @@ enum ContentSubmissionPolicy {
             }
             guard title.count <= maximumTitleCharacters else {
                 throw ContentSubmissionValidationError.titleTooLong(limit: maximumTitleCharacters)
-            }
-            guard request.images.isEmpty else {
-                throw ContentSubmissionValidationError.imagesUnsupportedForNewThread
             }
         }
 

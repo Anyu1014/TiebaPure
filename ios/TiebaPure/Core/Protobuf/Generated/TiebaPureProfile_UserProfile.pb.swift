@@ -341,6 +341,15 @@ nonisolated struct Tiebapure_Profile_UserThreadItem: @unchecked Sendable {
     set {_uniqueStorage()._shareNum = newValue}
   }
 
+  var agree: Tieba_Agree {
+    get {_storage._agree ?? Tieba_Agree()}
+    set {_uniqueStorage()._agree = newValue}
+  }
+  /// Returns true if `agree` has been explicitly set.
+  var hasAgree: Bool {_storage._agree != nil}
+  /// Clears the value of `agree`. Subsequent reads from it will return its default value.
+  mutating func clearAgree() {_uniqueStorage()._agree = nil}
+
   var richTitle: [Tieba_PbContent] {
     get {_storage._richTitle}
     set {_uniqueStorage()._richTitle = newValue}
@@ -743,7 +752,7 @@ nonisolated extension Tiebapure_Profile_UserThreadsRequest: SwiftProtobuf.Messag
 
 nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".UserThreadItem"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}forum_id\0\u{3}thread_id\0\u{3}post_id\0\u{3}is_thread\0\u{3}create_time\0\u{3}forum_name\0\u{1}title\0\u{4}\u{2}content_thread\0\u{3}user_name\0\u{1}ip\0\u{4}\u{4}abstract_thread\0\u{1}media\0\u{3}reply_num\0\u{3}user_id\0\u{3}user_portrait\0\u{4}\u{4}voice_info\0\u{4}\u{c}name_show\0\u{4}\u{2}agree_num\0\u{3}view_num\0\u{3}share_num\0\u{4}\u{6}rich_title\0\u{3}rich_abstract\0\u{4}\u{3}first_post_content\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}forum_id\0\u{3}thread_id\0\u{3}post_id\0\u{3}is_thread\0\u{3}create_time\0\u{3}forum_name\0\u{1}title\0\u{4}\u{2}content_thread\0\u{3}user_name\0\u{1}ip\0\u{4}\u{4}abstract_thread\0\u{1}media\0\u{3}reply_num\0\u{3}user_id\0\u{3}user_portrait\0\u{4}\u{4}voice_info\0\u{4}\u{c}name_show\0\u{4}\u{2}agree_num\0\u{3}view_num\0\u{3}share_num\0\u{1}agree\0\u{4}\u{5}rich_title\0\u{3}rich_abstract\0\u{4}\u{3}first_post_content\0")
 
   fileprivate class _StorageClass {
     var _forumID: UInt64 = 0
@@ -766,6 +775,7 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
     var _agreeNum: Int32 = 0
     var _viewNum: Int32 = 0
     var _shareNum: Int32 = 0
+    var _agree: Tieba_Agree? = nil
     var _richTitle: [Tieba_PbContent] = []
     var _richAbstract: [Tieba_PbContent] = []
     var _firstPostContent: [Tieba_PbContent] = []
@@ -799,6 +809,7 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
       _agreeNum = source._agreeNum
       _viewNum = source._viewNum
       _shareNum = source._shareNum
+      _agree = source._agree
       _richTitle = source._richTitle
       _richAbstract = source._richAbstract
       _firstPostContent = source._firstPostContent
@@ -840,6 +851,7 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
         case 37: try { try decoder.decodeSingularInt32Field(value: &_storage._agreeNum) }()
         case 38: try { try decoder.decodeSingularInt32Field(value: &_storage._viewNum) }()
         case 39: try { try decoder.decodeSingularInt32Field(value: &_storage._shareNum) }()
+        case 40: try { try decoder.decodeSingularMessageField(value: &_storage._agree) }()
         case 45: try { try decoder.decodeRepeatedMessageField(value: &_storage._richTitle) }()
         case 46: try { try decoder.decodeRepeatedMessageField(value: &_storage._richAbstract) }()
         case 49: try { try decoder.decodeRepeatedMessageField(value: &_storage._firstPostContent) }()
@@ -851,6 +863,10 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
       if _storage._forumID != 0 {
         try visitor.visitSingularUInt64Field(value: _storage._forumID, fieldNumber: 1)
       }
@@ -911,6 +927,9 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
       if _storage._shareNum != 0 {
         try visitor.visitSingularInt32Field(value: _storage._shareNum, fieldNumber: 39)
       }
+      try { if let v = _storage._agree {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
+      } }()
       if !_storage._richTitle.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._richTitle, fieldNumber: 45)
       }
@@ -949,6 +968,7 @@ nonisolated extension Tiebapure_Profile_UserThreadItem: SwiftProtobuf.Message, S
         if _storage._agreeNum != rhs_storage._agreeNum {return false}
         if _storage._viewNum != rhs_storage._viewNum {return false}
         if _storage._shareNum != rhs_storage._shareNum {return false}
+        if _storage._agree != rhs_storage._agree {return false}
         if _storage._richTitle != rhs_storage._richTitle {return false}
         if _storage._richAbstract != rhs_storage._richAbstract {return false}
         if _storage._firstPostContent != rhs_storage._firstPostContent {return false}

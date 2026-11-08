@@ -93,8 +93,15 @@ struct SessionMonitoringTiebaAPI: TiebaAPIService {
         )
     }
 
+    func searchUsers(keyword: String, account: Account?) async throws -> [UserSummary] {
+        try await base.searchUsers(keyword: keyword, account: account)
+    }
     func resolveUser(named name: String) async throws -> UserSummary {
         try await base.resolveUser(named: name)
+    }
+
+    func userByTiebaID(_ id: String, account: Account?) async throws -> UserSummary {
+        try await monitored(account: account) { try await base.userByTiebaID(id, account: account) }
     }
 
     func threadPage(
@@ -217,6 +224,12 @@ struct SessionMonitoringTiebaAPI: TiebaAPIService {
     func signForum(account: Account, forum: Forum) async throws -> ForumSignResult {
         try await monitored(account: account) {
             try await base.signForum(account: account, forum: forum)
+        }
+    }
+
+    func accountLikes(account: Account, page: Int, filter: AccountLikesFilter) async throws -> AccountLikedContentPage {
+        try await monitored(account: account) {
+            try await base.accountLikes(account: account, page: page, filter: filter)
         }
     }
 

@@ -46,19 +46,30 @@ import org.json.JSONObject
     IOSAvatar(name, avatar, modifier, diameter)
 }
 
-@Composable fun ThreadRow(vm: AppViewModel, thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, click: () -> Unit) {
+@Composable fun ThreadRow(vm: AppViewModel, thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, forumCategory: String? = null, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, click: () -> Unit) {
+    val forumFeed = forumCategory != null
     var menu by remember(thread.id) { mutableStateOf(false) }
     val surface = MaterialTheme.colorScheme.surface
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val date = remember(thread.timestamp) { readerDateText(thread.timestamp) }
     Column(Modifier.fillMaxWidth().then(if (homeFeed) Modifier.padding(horizontal = IOSLayout.feedInset, vertical = 6.dp) else Modifier).clip(RoundedCornerShape(if (homeFeed) IOSLayout.cardRadius else 0.dp)).background(surface).clickable(onClick = click).padding(horizontal = IOSLayout.cardInset, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val name = thread.forum.takeIf { it.isNotBlank() }?.let { if (it.endsWith("吧")) it else it + "吧" } ?: thread.author.name
-            Box(Modifier.size(44.dp).clickable(enabled = onForum != null, onClick = { onForum?.invoke() }), contentAlignment = Alignment.Center) { if (thread.forum.isNotBlank()) ForumAvatar(vm, thread.forum, thread.forumAvatar) else IOSAvatar(name, thread.author.portrait) }
+            val name = if (forumFeed) thread.author.name.ifBlank { "贴吧用户" } else thread.forum.takeIf { it.isNotBlank() }?.let { if (it.endsWith("吧")) it else it + "吧" } ?: thread.author.name
+            val openIdentity = if (forumFeed) onUser else onForum
+            Box(Modifier.size(44.dp).clickable(enabled = openIdentity != null, onClick = { openIdentity?.invoke() }), contentAlignment = Alignment.Center) {
+                if (forumFeed || thread.forum.isBlank()) IOSAvatar(name, thread.author.portrait) else ForumAvatar(vm, thread.forum, thread.forumAvatar)
+            }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(name, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(enabled = onForum != null, onClick = { onForum?.invoke() }))
-                Text(thread.author.name + if (date.isBlank()) "" else " · $date", fontSize = 12.sp, lineHeight = 16.sp, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(enabled = onUser != null, onClick = { onUser?.invoke() }))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (forumFeed) 4.dp else 0.dp)) {
+                Text(name, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = if (forumFeed) FontWeight.Medium else FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(enabled = openIdentity != null, onClick = { openIdentity?.invoke() }))
+                if (forumFeed) {
+                    if (date.isNotBlank()) Row(Modifier.clickable(enabled = onUser != null, onClick = { onUser?.invoke() }), verticalAlignment = Alignment.CenterVertically) {
+                        val published = forumCategory == "publish"
+                        Icon(if (published) TiebaIcons.Clock else TiebaIcons.Replies, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.width(4.dp))
+                        Text(date + if (published) "发布" else "回复", fontSize = 12.sp, lineHeight = 16.sp, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                } else Text(thread.author.name + if (date.isBlank()) "" else " · $date", fontSize = 12.sp, lineHeight = 16.sp, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(enabled = onUser != null, onClick = { onUser?.invoke() }))
             }
             if (onBlock != null) Box {
                 IconButton(onClick = { menu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "更多帖子操作", modifier = Modifier.rotate(90f).size(22.dp)) }
@@ -106,22 +117,25 @@ import org.json.JSONObject
     Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(IOSLayout.groupRadius)).background(MaterialTheme.colorScheme.surface), content = content)
 }
 
-@Composable fun IOSRow(title: String, icon: ImageVector, onClick: () -> Unit) {
+@Composable fun IOSRow(title: String, icon: ImageVector, unread: Boolean = false, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp).heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = IOSLayout.blue, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(12.dp))
-        Text(title, fontSize = 17.sp, modifier = Modifier.weight(1f).padding(vertical = 11.dp))
+        Box(Modifier.weight(1f).padding(vertical = 11.dp)) {
+            MessageTitleWithUnread(title, unread, fontSize = 17.sp)
+        }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
     }
     HorizontalDivider(Modifier.padding(start = 48.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 }
 
 @Composable fun IOSMeScreen(vm: AppViewModel, padding: PaddingValues, onAccount: () -> Unit) {
+    RefreshMessageBadges(vm)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
         item { GroupHeader("账号") }
         item { IOSGroup {
             if (vm.account == null) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Info, null, tint = IOSLayout.blue); Spacer(Modifier.width(10.dp)); Text("未登录也可以浏览公开帖子", fontSize = 17.sp) }
-                IOSRow("手机号验证码登录", Icons.Outlined.Phone, onAccount)
+                IOSRow("手机号验证码登录", Icons.Outlined.Phone, onClick = onAccount)
             } else {
                 val account = vm.account!!
                 Row(Modifier.fillMaxWidth().clickable { vm.navigate(Route("profile", account.uid, account.name)) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -130,7 +144,7 @@ import org.json.JSONObject
                     Column(Modifier.weight(1f)) { Text(account.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold); Text("UID ${account.uid}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
                 }
-                IOSRow("消息", Icons.Outlined.Notifications) { vm.navigate(Route("messages")) }
+                IOSRow("消息", Icons.Outlined.Notifications, unread = vm.hasUnreadMessages()) { vm.navigate(Route("messages")) }
                 IOSRow("关注的用户", Icons.Outlined.Person) { vm.navigate(Route("following", vm.account!!.uid)) }
                 IOSRow("关注的吧", TiebaIcons.Star) { vm.navigate(Route("forums"), root = true) }
             }
@@ -138,12 +152,13 @@ import org.json.JSONObject
         item { GroupHeader("浏览") }
         item { IOSGroup {
             IOSRow("帖子收藏", TiebaIcons.Star) { vm.navigate(Route("favorites")) }
+            IOSRow("我的点赞", Icons.Outlined.ThumbUp) { vm.navigate(Route("likes")) }
             IOSRow("浏览历史", Icons.Outlined.DateRange) { vm.navigate(Route("history")) }
         } }
         item { GroupHeader("应用") }
         item { IOSGroup {
             IOSRow("设置", Icons.Outlined.Settings) { vm.navigate(Route("settings")) }
-            IOSRow("关于 TiebaLite", Icons.Outlined.Info) { vm.navigate(Route("about")) }
+            IOSRow("关于 TiebaPure", Icons.Outlined.Info) { vm.navigate(Route("about")) }
         } }
     }
 }

@@ -8,8 +8,8 @@
 
 日志：logs/android-auto-pagination-build.log、logs/android-pagination-ui-test-build.log、logs/android-auto-pagination-native-test.log、logs/ios-auto-pagination-build.log。构建和哈希记录：logs/ui-1.0-validation.json。
 
-验证用APK：/Users/y/Downloads/Codex/Mac工作区/TiebaLite/android/app/build/outputs/apk/debug/app-debug.apk，已更新到专用TiebaLite-lab/emulator-5580。正式releases保持原交付版本。
+验证用APK：/Users/y/Downloads/Codex/Mac工作区/TiebaPure/android/app/build/outputs/apk/debug/app-debug.apk，已更新到专用TiebaPure-lab/emulator-5580。正式releases保持原交付版本。
 
 工具：共用工具箱/Users/y/toolchains，JDK21.0.12.1、Gradle8.14.3、AGP8.13.0、Kotlin2.2.20、SDK36、ADB35.0.2、Emulator37.2.12、Xcode27.0。未下载或安装新组件，未增加依赖，未触及用户真机。
 
-右侧iPhone预览为previews/ios-layout.html网页布局示意，非原生运行结果，也不代表最新关于页的iOS运行截图。
+右侧iPhone预览为本地临时预览页（`.cache/previews/`，不随仓库分发）的网页布局示意，非原生运行结果，也不代表最新关于页的iOS运行截图。

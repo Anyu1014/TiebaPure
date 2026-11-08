@@ -1,13 +1,23 @@
+import CoreText
 import SwiftUI
+
+struct PrivateMessagesTabPreferenceKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
 
 struct MessagesView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.floatingRootTabSelection) private var rootSelection
+    @ObservedObject var unread: MessageUnreadState
 
     let account: Account?
     private let openThreadInParent: ((ReaderSplitThreadRoute) -> Void)?
 
     @ObservedObject private var blocklistStore = BlocklistStore.shared
-    @State private var kind: MessageKind = .reply
+    @State private var selectedTab = 0
+    private var kind: MessageKind { selectedTab == 1 ? .at : .reply }
     @State private var items: [MessageItem] = []
     @State private var nextPage = 1
     @State private var hasMore = true
@@ -21,9 +31,11 @@ struct MessagesView: View {
 
     init(
         account: Account?,
+        unread: MessageUnreadState,
         openThreadInParent: ((ReaderSplitThreadRoute) -> Void)? = nil
     ) {
         self.account = account
+        self.unread = unread
         self.openThreadInParent = openThreadInParent
     }
 
@@ -56,7 +68,15 @@ struct MessagesView: View {
             guard didLoad == false else { return }
             await reload()
         }
-        .onChange(of: kind) { _ in
+        .task(id: badgeRefreshScope) {
+            guard let account, badgeRefreshScope != nil else { return }
+            await unread.refreshWhileVisible(
+                account: account,
+                environment: environment,
+                viewing: selectedTab
+            )
+        }
+        .onChange(of: selectedTab) { _ in
             resetForNewRequestScope()
             Task { await reload() }
         }
@@ -78,16 +98,51 @@ struct MessagesView: View {
             requestGeneration += 1
             isLoading = false
         }
+        .preference(key: PrivateMessagesTabPreferenceKey.self, value: selectedTab == 2)
         .accessibilityIdentifier("messages-screen")
         .fullScreenInteractiveNavigationPop()
     }
 
+    private let tabTitles = ["回复我的", "@我的", "私信"]
+
+    private struct BadgeRefreshScope: Hashable {
+        let session: AccountSessionIdentity
+        let tab: Int
+    }
+
+    private var badgeRefreshScope: BadgeRefreshScope? {
+        guard scenePhase == .active, rootSelection?.wrappedValue == .me,
+              let account else { return nil }
+        return BadgeRefreshScope(session: account.sessionIdentity, tab: selectedTab)
+    }
+
     private var kindPicker: some View {
-        Picker("消息类型", selection: $kind) {
-            Text("回复我的").tag(MessageKind.reply)
-            Text("@我的").tag(MessageKind.at)
+        let tabsWithUnread = unread.tabs(for: account)
+        return Picker("消息类型", selection: $selectedTab) {
+            ForEach(tabTitles.indices, id: \.self) { tab in
+                Text(tabTitles[tab]).tag(tab)
+            }
         }
         .pickerStyle(.segmented)
+        .overlay {
+            HStack(spacing: 0) {
+                ForEach(tabTitles.indices, id: \.self) { tab in
+                    Text(tabTitles[tab])
+                        .font(.system(size: 13))
+                        .hidden()
+                        .overlay(alignment: .topTrailing) {
+                            if tabsWithUnread.contains(tab) {
+                                UnreadBadge().offset(x: 8, y: -4)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .accessibilityValue(tabTitles.indices.filter { tabsWithUnread.contains($0) }
+            .map { "\(tabTitles[$0])有未读消息" }.joined(separator: "，"))
         .frame(maxWidth: 320)
         .frame(minHeight: 44)
         .padding(.horizontal, TiebaPureTheme.Spacing.md)
@@ -101,10 +156,15 @@ struct MessagesView: View {
             ReaderStateView(
                 kind: .empty,
                 title: "登录后查看消息",
-                message: "登录后可以在这里查看回复我的和@我的消息。",
+                message: "登录后可以查看回复、@我的和私信消息。",
                 systemImage: "person.crop.circle.badge.exclamationmark"
             )
             .accessibilityIdentifier("messages-login-prompt")
+        } else if selectedTab == 2, let account {
+            PrivateMessagesView(account: account) { hasUnread in
+                unread.updatePrivate(hasUnread, for: account)
+            }
+            .id(account.sessionIdentity)
         } else if isLoading, didLoad == false {
             ReaderStateView.loading("正在加载消息")
         } else if let errorMessage, items.isEmpty {
@@ -240,7 +300,7 @@ struct MessagesView: View {
     }
 
     private func reload() async {
-        guard account != nil else { return }
+        guard account != nil, selectedTab != 2 else { return }
         loadTask?.cancel()
         requestGeneration += 1
         isLoading = false
@@ -259,7 +319,7 @@ struct MessagesView: View {
         replacing: Bool,
         consecutiveHiddenPageCount: Int = 0
     ) async {
-        guard let account else { return }
+        guard let account, selectedTab != 2 else { return }
         guard isLoading == false, hasMore || replacing else { return }
         let requestedSession = account.sessionIdentity
         let requestedKind = kind
@@ -278,8 +338,11 @@ struct MessagesView: View {
             }
             loadTask = task
             let page = try await task.value
-            guard generation == requestGeneration,
+            guard generation == requestGeneration, !Task.isCancelled,
                   requestedSession == self.account?.sessionIdentity else { return }
+            if replacing {
+                unread.didView(page, kind: requestedKind, account: account)
+            }
             let visibleItems = page.items.filter(TiebaContentFilter.shouldKeep(message:))
             if replacing {
                 items = deduplicated(visibleItems)
@@ -328,6 +391,143 @@ struct MessagesView: View {
     private func deduplicated(_ candidates: [MessageItem]) -> [MessageItem] {
         var seen = Set<String>()
         return candidates.filter { seen.insert($0.id).inserted }
+    }
+}
+
+struct UnreadBadge: View {
+    var count: Int? = nil
+
+    var body: some View {
+        if let count {
+            Canvas { context, size in
+                let line = CTLineCreateWithAttributedString(NSAttributedString(
+                    string: count > 99 ? "99+" : String(count),
+                    attributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold),
+                                 .foregroundColor: UIColor.white]
+                ))
+                let glyph = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+                context.withCGContext { graphics in
+                    graphics.translateBy(x: size.width / 2 - glyph.midX, y: size.height / 2 + glyph.midY)
+                    graphics.scaleBy(x: 1, y: -1)
+                    graphics.textPosition = .zero
+                    CTLineDraw(line, graphics)
+                }
+            }
+            .frame(width: 21, height: 21)
+            .background(Color(uiColor: .systemRed), in: Circle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(count) 条未读私信")
+        } else {
+            Circle()
+                .fill(Color(uiColor: .systemRed))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+@MainActor
+final class MessageUnreadState: ObservableObject {
+    @Published private var unreadTabs: Set<Int> = []
+    private var session: AccountSessionIdentity?
+    private var viewedHeads: [MessageKind: String] = [:]
+    private var otherCounts: [MessageKind: Int] = [:]
+    private let defaults: UserDefaults?
+
+    init(defaults: UserDefaults? = .standard) {
+        self.defaults = defaults
+    }
+
+    func tabs(for account: Account?) -> Set<Int> {
+        account?.sessionIdentity == session ? unreadTabs : []
+    }
+
+    func refreshWhileVisible(account: Account, environment: AppEnvironment, viewing tab: Int? = nil) async {
+        guard !Task.isCancelled else { return }
+        if session != account.sessionIdentity {
+            session = account.sessionIdentity
+            viewedHeads = [:]
+            otherCounts = [:]
+            unreadTabs = []
+        }
+
+        while !Task.isCancelled, session == account.sessionIdentity {
+            async let feeds: Void = refreshFeeds(viewing: tab, account: account, api: environment.api)
+            async let privateMessages: Void = refreshPrivate(unlessViewing: tab, account: account, client: environment.privateMessageClient)
+            _ = await (feeds, privateMessages)
+            do {
+                try await Task.sleep(for: .seconds(30))
+            } catch {
+                return
+            }
+        }
+    }
+
+    func didView(_ page: MessagesPage, kind: MessageKind, account: Account) {
+        guard session == account.sessionIdentity else { return }
+        otherCounts[kind == .reply ? .at : .reply] = page.otherUnreadCount
+        let head = page.items.first?.id ?? ""
+        if viewedHeads[kind] != head {
+            viewedHeads[kind] = head
+            defaults?.set(head, forKey: viewedKey(kind, account: account))
+        }
+        setUnread(false, tab: kind == .reply ? 0 : 1)
+    }
+
+    func updatePrivate(_ hasUnread: Bool, for account: Account) {
+        guard session == account.sessionIdentity, !Task.isCancelled else { return }
+        setUnread(hasUnread, tab: 2)
+    }
+
+    private func refreshFeeds(viewing selected: Int?, account: Account, api: any TiebaAPIService) async {
+        async let replyPage = fetchFeed(.reply, skip: selected == 0, account: account, api: api)
+        async let atPage = fetchFeed(.at, skip: selected == 1, account: account, api: api)
+        let (replies, mentions) = await (replyPage, atPage)
+        guard !Task.isCancelled, session == account.sessionIdentity else { return }
+
+        if let replies {
+            updateFeed(replies, kind: .reply, tab: 0, otherCount: mentions?.otherUnreadCount, account: account)
+        }
+        if let mentions {
+            updateFeed(mentions, kind: .at, tab: 1, otherCount: replies?.otherUnreadCount, account: account)
+        }
+    }
+
+    private func fetchFeed(_ kind: MessageKind, skip: Bool, account: Account, api: any TiebaAPIService) async -> MessagesPage? {
+        guard !skip else { return nil }
+        return try? await api.messages(account: account, kind: kind, page: 1)
+    }
+
+    private func updateFeed(_ page: MessagesPage, kind: MessageKind, tab: Int, otherCount: Int?, account: Account) {
+        let viewed = viewedHeads[kind] ?? defaults?.string(forKey: viewedKey(kind, account: account))
+        setUnread(Self.hasUnread(page, since: viewed, otherCount: otherCount ?? otherCounts[kind]), tab: tab)
+    }
+
+    static func hasUnread(_ page: MessagesPage, since viewed: String?, otherCount: Int? = nil) -> Bool {
+        guard let head = page.items.first, head.id != viewed else { return false }
+        if (page.unreadCount ?? otherCount ?? 0) > 0 { return true }
+        let newer = page.items.prefix { $0.id != viewed }
+        if newer.contains(where: { $0.isUnread == true }) { return true }
+        // shortcut: Older feeds can omit unread fields. Compare first-page IDs until they expose read state.
+        return viewed != nil && page.unreadCount == nil && newer.contains { $0.isUnread == nil }
+    }
+
+    private func refreshPrivate(unlessViewing selected: Int?, account: Account, client: PrivateMessageClient) async {
+        if let cached = try? client.hasCachedUnread(account: account) {
+            updatePrivate(cached, for: account)
+        }
+        guard selected != 2, !Task.isCancelled,
+              let page = try? await client.conversations(account: account) else { return }
+        updatePrivate(page.items.contains { $0.unread > 0 }, for: account)
+    }
+
+    private func setUnread(_ hasUnread: Bool, tab: Int) {
+        guard unreadTabs.contains(tab) != hasUnread else { return }
+        if hasUnread { unreadTabs.insert(tab) } else { unreadTabs.remove(tab) }
+    }
+
+    private func viewedKey(_ kind: MessageKind, account: Account) -> String {
+        "message-viewed-head.\(account.uid).\(kind.rawValue)"
     }
 }
 

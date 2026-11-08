@@ -16,12 +16,15 @@ struct MessageItem: Identifiable, Equatable, Sendable {
     var forumName: String?
     var isFloorReply: Bool
     var createdAt: Date?
+    var isUnread: Bool? = nil
 }
 
 struct MessagesPage: Equatable, Sendable {
     var items: [MessageItem]
     var currentPage: Int
     var hasMore: Bool
+    var unreadCount: Int? = nil
+    var otherUnreadCount: Int? = nil
 }
 
 struct MessagePaginationState: Equatable, Sendable {
@@ -127,6 +130,7 @@ struct MessageListResponseDTO: Decodable {
         var forumName: String
         var createdAt: Date?
         var timeIdentity: String
+        var isUnread: Bool?
 
         enum CodingKeys: String, CodingKey {
             case isFloor = "is_floor"
@@ -139,10 +143,13 @@ struct MessageListResponseDTO: Decodable {
             case quotePostID = "quote_pid"
             case forumName = "fname"
             case time
+            case unread
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            isUnread = (try? container.decode(Bool.self, forKey: .unread))
+                ?? container.flexibleString(forKey: .unread).flatMap(Int.init).map { $0 > 0 }
             isFloor = container.flexibleInt(forKey: .isFloor) == 1
             title = container.flexibleString(forKey: .title) ?? ""
             content = container.flexibleString(forKey: .content) ?? ""
@@ -182,7 +189,8 @@ struct MessageListResponseDTO: Decodable {
                 threadTitle: title,
                 forumName: forumName.isEmpty ? nil : forumName,
                 isFloorReply: isFloor,
-                createdAt: createdAt
+                createdAt: createdAt,
+                isUnread: isUnread
             )
         }
     }
@@ -225,6 +233,8 @@ struct MessageListResponseDTO: Decodable {
     var atList: [MessageDTO]?
     var currentPage: Int
     var hasMore: Bool
+    var unreadReplies: Int?
+    var unreadMentions: Int?
 
     enum CodingKeys: String, CodingKey {
         case errorCode = "error_code"
@@ -232,6 +242,11 @@ struct MessageListResponseDTO: Decodable {
         case replyList = "reply_list"
         case atList = "at_list"
         case page
+        case message
+    }
+
+    enum UnreadCodingKeys: String, CodingKey {
+        case replyme, atme
     }
 
     enum PageCodingKeys: String, CodingKey {
@@ -259,6 +274,10 @@ struct MessageListResponseDTO: Decodable {
             // the server includes a malformed payload alongside the code.
             replyList = nil
             atList = nil
+        }
+        if let message = try? container.nestedContainer(keyedBy: UnreadCodingKeys.self, forKey: .message) {
+            unreadReplies = message.flexibleString(forKey: .replyme).flatMap(Int.init)
+            unreadMentions = message.flexibleString(forKey: .atme).flatMap(Int.init)
         }
         if let page = try? container.nestedContainer(keyedBy: PageCodingKeys.self, forKey: .page) {
             currentPage = page.flexibleInt(forKey: .currentPage)
@@ -304,7 +323,9 @@ extension TiebaAPI {
         return MessagesPage(
             items: list.compactMap { $0.messageItem(kind: kind) },
             currentPage: max(response.currentPage, page),
-            hasMore: response.hasMore
+            hasMore: response.hasMore,
+            unreadCount: kind == .reply ? response.unreadReplies : response.unreadMentions,
+            otherUnreadCount: kind == .reply ? response.unreadMentions : response.unreadReplies
         )
     }
 }

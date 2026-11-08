@@ -78,8 +78,12 @@ struct ContentComposerPresentation: View {
 
     @State private var draft: ContentDraft?
     @State private var draftLoadState: ContentComposerDraftLoadState = .loading
+    @State private var preservesUnreadDraft = false
     @State private var showsRiskConfirmation = false
     @State private var showsDamagedDraftDeletionConfirmation = false
+    @State private var showsDraftClearConfirmation = false
+    @State private var isClearingDraft = false
+    @State private var draftClearError: String?
 #if DEBUG
     @State private var fixtureDraftLoadAttempts = 0
 #endif
@@ -93,6 +97,7 @@ struct ContentComposerPresentation: View {
                     initialTitle: draft?.title ?? "",
                     initialBody: draft?.body ?? "",
                     initialImages: draft?.images ?? [],
+                    draftPersistenceNotice: preservesUnreadDraft ? "原有草稿已保留。本次编辑暂不能保存草稿，请发送后再退出。" : nil,
                     onCancel: close,
                     onSaveDraft: saveDraft,
                     onSend: submit,
@@ -105,13 +110,39 @@ struct ContentComposerPresentation: View {
                 }
             case .unavailable:
                 draftStateNavigation {
-                    ReaderStateView.error(
-                        title: "无法恢复草稿",
-                        message: "本机草稿读取失败。为避免覆盖已有内容，编辑器已暂停打开。",
-                        actionTitle: "重试",
-                        action: retryDraftLoad
-                    )
-                    .accessibilityIdentifier("content-composer-draft-load-error")
+                    VStack(spacing: 16) {
+                        ReaderStateView.error(
+                            title: "无法恢复草稿",
+                            message: "本机草稿暂时无法读取。你可以重试，或清空此发布位置的草稿信息后重新编辑。",
+                            actionTitle: "重试",
+                            action: retryDraftLoad
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("content-composer-draft-load-error")
+                        Button(role: .destructive) {
+                            showsDraftClearConfirmation = true
+                        } label: {
+                            if isClearingDraft { ProgressView("正在清空草稿") }
+                            else { Text("清空草稿信息") }
+                        }
+                        .frame(minHeight: 44)
+                        .disabled(isClearingDraft)
+                        .accessibilityIdentifier("content-composer-clear-draft")
+                        if let draftClearError {
+                            Text(draftClearError).foregroundStyle(.red).multilineTextAlignment(.center)
+                        }
+                        Button("暂不恢复草稿，继续编辑") {
+                            preservesUnreadDraft = true
+                            draft = nil
+                            draftLoadState = .loaded
+                            presentRiskConfirmationIfNeeded()
+                        }
+                        .frame(minHeight: 44)
+                        .disabled(isClearingDraft)
+                        .accessibilityIdentifier("content-composer-continue-without-draft")
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 16)
                 }
             case let .damaged(damage):
                 damagedDraftNavigation(
@@ -142,7 +173,7 @@ struct ContentComposerPresentation: View {
                 ContentSubmissionRiskPolicy.acknowledge()
             }
         } message: {
-            Text("TiebaLite 通过非官方实验接口发帖和回复。使用时可能触发贴吧风控，导致内容被隐藏或删除、发帖或回帖等账号功能受限；极端情况下账号可能被冻结。若发送结果无法确认，应用不会自动重发，请先刷新页面核对。")
+            Text("TiebaPure 通过非官方实验接口发帖和回复。使用时可能触发贴吧风控，导致内容被隐藏或删除、发帖或回帖等账号功能受限；极端情况下账号可能被冻结。若发送结果无法确认，应用不会自动重发，请先刷新页面核对。")
         }
         .confirmationDialog(
             "删除损坏草稿？",
@@ -155,6 +186,12 @@ struct ContentComposerPresentation: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("损坏草稿无法恢复。删除后将打开空编辑器，此操作无法撤销。")
+        }
+        .confirmationDialog("清空此位置的草稿信息？", isPresented: $showsDraftClearConfirmation, titleVisibility: .visible) {
+            Button("清空当前草稿", role: .destructive, action: clearUnavailableDraft)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("只清空当前账号在此发布位置的草稿信息，其他草稿不受影响。清空后将打开可保存新草稿的空白编辑器。")
         }
     }
 
@@ -235,9 +272,32 @@ struct ContentComposerPresentation: View {
     }
 
     private func retryDraftLoad() {
+        guard isClearingDraft == false else { return }
+        draftClearError = nil
         draftLoadState = .loading
         Task {
             await loadDraft()
+        }
+    }
+
+    private func clearUnavailableDraft() {
+        guard isClearingDraft == false else { return }
+        isClearingDraft = true
+        draftClearError = nil
+        Task { @MainActor in
+            defer { isClearingDraft = false }
+            do {
+                try environment.contentDraftStore.reset(accountID: account.id, target: target)
+                let outcome = await environment.contentDraftStore.loadAsync(accountID: account.id, target: target)
+                guard outcome == .loaded(nil) else { throw ContentDraftPersistenceError.unavailable }
+                guard Task.isCancelled == false else { return }
+                draft = nil
+                preservesUnreadDraft = false
+                draftLoadState = .loaded
+                presentRiskConfirmationIfNeeded()
+            } catch {
+                draftClearError = "草稿暂时无法清空，请重试。"
+            }
         }
     }
 
@@ -269,6 +329,9 @@ struct ContentComposerPresentation: View {
     }
 
     private func saveDraft(_ request: ContentSubmissionRequest) async throws {
+        guard preservesUnreadDraft == false else {
+            throw ContentComposerPresentationError.draftPersistenceUnavailable
+        }
         let updatedAt = Date()
         do {
             try await environment.contentDraftStore.saveAsync(
@@ -303,7 +366,7 @@ struct ContentComposerPresentation: View {
 
     private func finish(_ receipt: ContentSubmissionReceipt) {
         draft = nil
-        let didDeleteDraft = environment.contentDraftStore.delete(accountID: account.id, target: target)
+        let didDeleteDraft = preservesUnreadDraft || environment.contentDraftStore.delete(accountID: account.id, target: target)
         onSent(receipt)
         DispatchQueue.main.async {
             close()
@@ -319,36 +382,3 @@ struct ContentComposerPresentation: View {
     }
 }
 
-struct ContentReplyEntryBar: View {
-    let title: String
-    let accessibilityIdentifier: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: TiebaPureTheme.Spacing.sm) {
-                Image(systemName: "square.and.pencil")
-                    .foregroundStyle(TiebaPureTheme.ColorToken.primaryAccent)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, TiebaPureTheme.Spacing.md)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, TiebaPureTheme.Spacing.md)
-        .padding(.vertical, TiebaPureTheme.Spacing.xs)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
-        .accessibilityLabel(title)
-        .accessibilityHint("打开回复编辑器")
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-}

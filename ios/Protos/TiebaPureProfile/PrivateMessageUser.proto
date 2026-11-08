@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package tiebapure.profile;
+
+import "CommonRequest.proto";
+import "Error.proto";
+import "User.proto";
+
+// Official getUserByTiebaUid, cmd 309702; field numbers are wire identifiers.
+message PrivateMessageUserRequestData {
+  tieba.CommonRequest common = 1;
+  string tieba_uid = 2;
+}
+message PrivateMessageUserRequest {
+  PrivateMessageUserRequestData data = 1;
+}
+message PrivateMessageUserResponseData {
+  tieba.User user = 1;
+}
+message PrivateMessageUserResponse {
+  tieba.Error error = 1;
+  PrivateMessageUserResponseData data = 2;
+}

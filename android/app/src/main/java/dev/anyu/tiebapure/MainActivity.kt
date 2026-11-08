@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -111,13 +114,14 @@ class MainActivity : ComponentActivity() {
             }
             MaterialTheme(shapes = Shapes(extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), small = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), medium = androidx.compose.foundation.shape.RoundedCornerShape(24.dp), large = androidx.compose.foundation.shape.RoundedCornerShape(26.dp), extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)), colorScheme = if (dark) darkColorScheme(primary = Color(0xff0a84ff), secondary = Color(0xff0a84ff), secondaryContainer = Color(0xff163565), background = Color.Black, surface = Color(0xff1c1c1e), surfaceContainer = Color(0xff1c1c1e), onSurface = Color.White, onSurfaceVariant = Color(0xff8e8e93)) else lightColorScheme(primary = IOSLayout.blue, secondary = IOSLayout.blue, secondaryContainer = Color(0xffe2edff), surface = Color.White, surfaceContainer = Color.White, background = IOSLayout.background, onSurface = Color.Black, onSurfaceVariant = Color(0xff8e8e93))) {
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-                AppScreen(vm, { export.launch("TiebaLite-backup.json") }, { restore.launch(arrayOf("application/json", "application/octet-stream")) })
+                AppScreen(vm, { export.launch("TiebaPure-backup.json") }, { restore.launch(arrayOf("application/json", "application/octet-stream")) })
                 }
             }
         }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleIntent(intent) }
-    override fun onResume() { super.onResume(); model.signAll(automatic = true) }
+    override fun onResume() { super.onResume(); model.signAll(automatic = true); AutoReplyRuntime.get(this).onForeground(true) }
+    override fun onStop() { if (!isChangingConfigurations) AutoReplyRuntime.get(this).onForeground(false); super.onStop() }
     fun chooseFont() { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) }
     fun saveMedia(block: Block) {
         lifecycleScope.launch {
@@ -129,22 +133,23 @@ class MainActivity : ComponentActivity() {
                 if (android.os.Build.VERSION.SDK_INT < 29) { model.pendingExport = item; saveMediaDocument.launch(item.name); prepared = null; return@launch }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val collection = when (item.folder) { "Pictures" -> android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI; "Movies" -> android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI; else -> android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI }
-                    val values = android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, item.name); put(android.provider.MediaStore.MediaColumns.MIME_TYPE, item.mime); put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, item.folder + "/TiebaLite"); put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1) }
+                    val values = android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, item.name); put(android.provider.MediaStore.MediaColumns.MIME_TYPE, item.mime); put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, item.folder + "/TiebaPure"); put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1) }
                     val uri = contentResolver.insert(collection, values) ?: error("无法创建媒体文件")
                     try {
                         contentResolver.openOutputStream(uri)?.use { out -> item.file.inputStream().use { it.copyTo(out) } } ?: error("无法写入媒体库")
                         contentResolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
                     } catch (e: Exception) { contentResolver.delete(uri, null, null); throw e }
                 }
-                model.inform("已保存到 ${item.folder}/TiebaLite")
+                model.inform("已保存到 ${item.folder}/TiebaPure")
             } catch (e: Exception) { model.report(e.message ?: "媒体保存失败") }
             finally { prepared?.file?.delete() }
         }
     }
     private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("open-automation", false) == true) { model.navigate(Route("automation")); return }
         val raw = intent?.dataString ?: intent?.getStringExtra(Intent.EXTRA_TEXT)
         if (raw != null) {
-            val url = Regex("(?:https://|tiebalite://)[^\\s]+").find(raw)?.value ?: raw
+            val url = Regex("(?:https://|tiebapure://)[^\\s]+").find(raw)?.value ?: raw
             Policy.route(url)?.let { model.navigate(it) } ?: model.report("这个链接不能作为贴吧帖子或贴吧打开")
         }
     }
@@ -171,6 +176,9 @@ class MainActivity : ComponentActivity() {
         (!isLibrary || listFilter.isBlank() || (t.title + t.author.name + t.forum).contains(listFilter.trim(), true)) &&
             (readingFilter == 0 || readingFilter == 1 && t.id !in readIds || readingFilter == 2 && t.id in readIds)
     }
+    var showsPinnedThreads by remember(r) { mutableStateOf(false) }
+    val forumPresentation = if (r.kind == "forum") forumPinnedPresentation(shownThreads, showsPinnedThreads) else null
+    val visibleThreads = forumPresentation?.visibleThreads ?: shownThreads
     val context = LocalContext.current
     val searchFocus = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -183,34 +191,42 @@ class MainActivity : ComponentActivity() {
         "me" -> "我的"
         "forum" -> if (r.id.endsWith("吧")) r.id else "${r.id}吧"
         "thread", "offline" -> vm.data.thread?.thread?.title ?: "帖子详情"
+        "searchusers" -> "搜索用户"
         "search", "searchinput" -> if (r.extra.isBlank()) "搜索" else "搜索本吧"
         "subposts" -> "楼中楼"
         "history" -> "浏览历史"
         "saved" -> "本地保存"
         "favorites" -> "账号收藏"
-        "messages" -> if (r.extra == "at") "@我的" else "回复我的"
+        "likes" -> "我的点赞"
+        "messages" -> "消息"
         "settings" -> "设置"
+        "automation" -> "自动回复"
         "readingSettings" -> "阅读设置"
         "block" -> "屏蔽管理"
-        "about" -> "关于 TiebaLite"
+        "about" -> "关于 TiebaPure"
         "login" -> "登录百度账号"
         else -> r.title
     }
     var activeRoot by remember { mutableStateOf("home") }
     LaunchedEffect(r.kind) { if (r.kind in setOf("home", "forums", "me")) activeRoot = r.kind }
     val homeFeedState = rememberLazyListState()
+    val listFeedStates = remember(vm.account?.uid) { linkedMapOf<Route, LazyListState>() }
     val otherFeedState = key(r) { rememberLazyListState() }
-    val feedState = if (r.kind == "home") homeFeedState else otherFeedState
+    val savedFeedState = if (r.kind in setOf("forum", "likes")) listFeedStates.getOrPut(r) { LazyListState() }.also {
+        if (listFeedStates.size > 8) listFeedStates.remove(listFeedStates.keys.first { it != r })
+    } else null
+    val feedState = if (r.kind == "home") homeFeedState else savedFeedState ?: otherFeedState
     val scope = rememberCoroutineScope()
     var isCollected by remember(r.id, vm.data.thread?.thread?.collected) { mutableStateOf(vm.data.thread?.thread?.collected == true) }
     val openSearch: () -> Unit = {
         query = ""
         vm.navigate(Route("searchinput", title = if (r.kind == "thread") "搜索本吧" else "搜索", extra = if (r.kind == "thread") vm.data.thread?.thread?.forum.orEmpty() else if (r.kind == "forum") r.id else ""))
     }
-    val showRefresh = r.kind !in setOf("home", "forums", "thread", "searchinput", "search", "login", "settings", "about", "me", "block")
+    val showRefresh = r.kind !in setOf("home", "forums", "thread", "searchinput", "search", "login", "settings", "about", "me", "block", "messages")
     FrostedAppShell(
         title = title, root = activeRoot,
-        showTabs = r.kind !in setOf("thread", "subposts", "offline", "login", "compose"),
+        tabPosition = vm.bottomBarPosition, showTabLabels = vm.bottomBarShowsLabels, autoCollapseTabs = vm.bottomBarAutoCollapse, account = vm.account, scrollKey = r.kind + ":" + r.id,
+        showTabs = r.kind !in setOf("thread", "subposts", "offline", "login", "compose") && !(r.kind == "messages" && r.extra == "private"),
         showBack = r.kind !in setOf("home", "forums", "me"),
         showSearch = r.kind == "home",
         startAlignedTitle = r.kind == "forum",
@@ -232,7 +248,7 @@ class MainActivity : ComponentActivity() {
         },
         snackbar = { SnackbarHost(snackbar) },
         feedback = {
-            if (vm.loading && r.kind != "home") LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (vm.loading && !vm.commentsRefreshing && r.kind != "home" && !(r.kind == "messages" && r.extra == "private")) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.saving) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text(vm.saveProgress.ifBlank { "正在准备本地保存…" }, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); TextButton(onClick = vm::cancelSave) { Text("取消") } }
             if (vm.error.isNotBlank() && r.kind != "home") Surface(color = MaterialTheme.colorScheme.errorContainer) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -284,6 +300,9 @@ class MainActivity : ComponentActivity() {
                         } }
                     }
                 }
+                "automation" -> AutoReplySettingsScreen(vm, padding)
+                "messages" -> MessagesScreen(vm, padding)
+                "likes" -> MyLikesScreen(vm, padding, feedState)
                 "thread", "subposts", "offline" -> BoxWithConstraints(Modifier.fillMaxSize()) {
                     if (maxWidth >= 840.dp && vm.contextThreads.isNotEmpty()) Row(Modifier.fillMaxSize()) {
                         LazyColumn(Modifier.weight(0.38f).fillMaxHeight()) { items(vm.contextThreads, key = { it.id + ":" + it.matchedPost }) { t -> ThreadRow(vm, t, vm.fontSize, !vm.manualMedia) { vm.navigate(Route("thread", t.id, t.title, t.matchedPost)) } } }
@@ -291,6 +310,7 @@ class MainActivity : ComponentActivity() {
                         Box(Modifier.weight(0.62f)) { PostScreen(vm, padding) }
                     } else PostScreen(vm, padding)
                 }
+                "searchusers" -> UserSearchScreen(vm)
                 else -> {
                     if (isLibrary) {
                         OutlinedTextField(value = listFilter, onValueChange = { listFilter = it }, singleLine = true, label = { Text(if (r.kind == "favorites") "筛选已加载收藏" else "搜索本机列表") }, modifier = Modifier.fillMaxWidth().padding(12.dp))
@@ -315,10 +335,7 @@ class MainActivity : ComponentActivity() {
                             else Spacer(Modifier.width(16.dp))
                         }
                     }
-                    if (r.kind == "messages") Row(Modifier.padding(horizontal = 12.dp)) {
-                        TextButton(onClick = { vm.navigate(Route("messages")) }) { Text("回复我的") }
-                        TextButton(onClick = { vm.navigate(Route("messages", extra = "at")) }) { Text("@我的") }
-                    }
+                    if (r.kind in setOf("search", "searchinput")) TextButton(onClick = { vm.navigate(Route("searchusers", query.ifBlank { r.id })) }) { Text("搜索用户（昵称 / ID）") }
                     if (r.kind == "forum") ForumCategoryPicker(vm)
                     PullRefreshContent(vm, Modifier.weight(1f), if (r.kind == "home") padding.calculateTopPadding() else 0.dp) {
                     LazyColumn(Modifier.fillMaxSize(), state = feedState, contentPadding = PaddingValues(top = if (r.kind == "home") padding.calculateTopPadding() + 6.dp else 0.dp, bottom = padding.calculateBottomPadding())) {
@@ -331,10 +348,20 @@ class MainActivity : ComponentActivity() {
                             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(vm.error); TextButton(onClick = vm::retryLoad) { Text("重试") } }
                         }
                         if (shownThreads.isEmpty() && !vm.loading && vm.error.isBlank()) item { EmptyMessage(if (r.kind == "searchinput") "输入关键词开始搜索" else if (listFilter.isBlank()) "暂无内容" else "没有匹配结果") }
-                        items(shownThreads, key = { it.id + ":" + it.matchedPost }) { thread -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (forumPresentation?.pinnedThreads?.isNotEmpty() == true) item(key = "forum-pinned-toggle") {
+                            ForumPinnedToggle(forumPresentation.pinnedThreads.size, showsPinnedThreads) { showsPinnedThreads = !showsPinnedThreads }
+                        }
+                        items(visibleThreads, key = { it.id + ":" + it.matchedPost }) { thread -> Row(
+                            modifier = if (r.kind == "forum") Modifier.animateItem(
+                                fadeInSpec = tween(200),
+                                placementSpec = tween(280, easing = FastOutSlowInEasing),
+                                fadeOutSpec = tween(160)
+                            ) else Modifier,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             if (managing) Checkbox(checked = thread.id in selected, onCheckedChange = { selected = if (it) selected + thread.id else selected - thread.id })
                             ThreadRow(
-                                vm, thread, vm.fontSize, !vm.manualMedia, homeFeed = r.kind == "home",
+                                vm, thread, vm.fontSize, !vm.manualMedia, homeFeed = r.kind == "home", forumCategory = r.extra.takeIf { r.kind == "forum" },
                                 onForum = if (managing || thread.forum.isBlank()) null else { { vm.navigate(Route("forum", thread.forum)) } },
                                 onUser = if (managing) null else { { if (thread.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", thread.author.id, thread.author.name)) } },
                                 onBlock = if (managing || thread.forum.isBlank()) null else { {
@@ -357,6 +384,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    AutoReplyCatchUpPrompt(vm)
     if (confirmLogout) AlertDialog(onDismissRequest = { confirmLogout = false }, title = { Text("退出登录？") }, text = { Text("将清除本机凭据、网页 Cookie 和登录网页数据。") }, confirmButton = { TextButton(onClick = { confirmLogout = false; vm.logout() }) { Text("退出") } }, dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("取消") } })
     if (confirmBatch) AlertDialog(onDismissRequest = { confirmBatch = false }, title = { Text(if (r.kind == "favorites") "取消选中的账号收藏？" else "删除选中的本机记录？") }, text = { Text("将处理 ${selected.size} 条记录。${if (r.kind == "saved") "已下载的对应离线媒体也会删除。" else ""}") }, confirmButton = { TextButton(onClick = { confirmBatch = false; vm.removeEntries(r.kind, selected) { selected = emptySet(); managing = false } }) { Text("确认") } }, dismissButton = { TextButton(onClick = { confirmBatch = false }) { Text("取消") } })
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("删除本人主题？") }, text = { Text("这会向贴吧提交永久删除请求。请确认当前主题确实需要删除。") }, confirmButton = { TextButton(onClick = {
@@ -380,24 +408,28 @@ class MainActivity : ComponentActivity() {
 @Composable fun PostScreen(vm: AppViewModel, padding: PaddingValues = PaddingValues()) {
     val p = vm.data.thread
     val r = vm.route
-    val showReplyBar = r.kind == "thread" && p != null && vm.repliesEnabled
+    val showReplyBar = (r.kind == "thread" && p != null || r.kind == "subposts") && vm.repliesEnabled
     val direction = LocalLayoutDirection.current
-    val listPadding = PaddingValues(start = padding.calculateStartPadding(direction), top = padding.calculateTopPadding(), end = padding.calculateEndPadding(direction), bottom = padding.calculateBottomPadding() + if (showReplyBar) 64.dp else 0.dp)
+    val listPadding = PaddingValues(start = padding.calculateStartPadding(direction), top = padding.calculateTopPadding(), end = padding.calculateEndPadding(direction), bottom = padding.calculateBottomPadding() + if (showReplyBar) 78.dp else 0.dp)
     if (vm.loading && vm.data.posts.isEmpty()) return
-    key(r.kind, r.id, r.extra, vm.sort, vm.onlyAuthor) {
+    key(r.kind, r.id, r.extra) {
     val positionId = if (r.kind == "offline") "offline:${r.id}" else r.id
-    val stored = remember(positionId) { vm.store.get("position", positionId) }
-    val scroll = rememberLazyListState(stored?.optInt("index", 0)?.coerceIn(0, vm.data.posts.size + 2) ?: 0, stored?.optInt("offset", 0)?.coerceIn(0, 1000000) ?: 0)
-    LaunchedEffect(scroll, r.kind) {
+    val stored = remember(positionId) { if (r.kind in setOf("thread", "offline")) vm.store.get("position", positionId) else null }
+    val targetSubpost = if (r.kind == "subposts") r.extra.split(':').getOrNull(2) else null
+    val scroll = remember { vm.readerListState(targetSubpost?.let { id -> vm.data.posts.indexOfFirst { it.id == id }.coerceAtLeast(0) } ?: stored?.optInt("index", 0)?.coerceIn(0, vm.data.posts.size + 2) ?: 0, stored?.optInt("offset", 0)?.coerceIn(0, 1000000) ?: 0) }
+    val readerSort = vm.sort
+    val readerOnlyAuthor = vm.onlyAuthor
+    LaunchedEffect(scroll, r.kind, readerSort, readerOnlyAuthor) {
         if (r.kind in setOf("thread", "offline")) snapshotFlow { scroll.firstVisibleItemIndex to scroll.firstVisibleItemScrollOffset }.drop(1).distinctUntilChanged().debounce(300).collect { (index, offset) ->
             val (visiblePage, pageIndex) = if (r.kind == "thread") threadReadingPosition(index, vm.data.posts.map { it.id }, vm.postPages, vm.page) else 1 to index
-            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { vm.store.put("position", positionId, JSONObject().put("page", visiblePage).put("index", pageIndex).put("offset", offset).put("total-pages", p?.pages ?: 1)) } }
+            try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { vm.store.put("position", positionId, JSONObject().put("page", visiblePage).put("index", pageIndex).put("offset", offset).put("total-pages", p?.pages ?: 1).put("sort", readerSort).put("only-author", readerOnlyAuthor)) } }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { vm.report("阅读位置未能保存，请检查本机剩余空间") }
         }
     }
-    Box(Modifier.fillMaxSize()) {
-    PullRefreshContent(vm, Modifier.fillMaxSize(), padding.calculateTopPadding()) {
+    val replyTarget = if (r.kind == "subposts") InlineReplyTarget(r.title, r.id, r.extra.substringBefore(':')) else p?.let { InlineReplyTarget(it.thread.forum, r.id) }
+    FloatingReplyReader(vm, padding, showReplyBar, replyTarget) { readerModifier ->
+    PullRefreshContent(vm, readerModifier, padding.calculateTopPadding()) {
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), state = scroll, contentPadding = listPadding) {
         if (p != null) item {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
@@ -429,7 +461,6 @@ class MainActivity : ComponentActivity() {
         if (r.kind in setOf("thread", "subposts") && vm.data.hasMore) item { AutomaticPageFooter(vm) }
     }
     }
-    if (showReplyBar) Button(onClick = { p?.let { vm.compose(it.thread.forum, r.id) } }, modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = padding.calculateBottomPadding()).fillMaxWidth().heightIn(min = 48.dp).testTag("thread-reply-bar")) { Text("回复帖子") }
     }
     }
 }
