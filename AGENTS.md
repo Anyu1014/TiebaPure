@@ -10,3 +10,4 @@
 - 修改后运行对应的构建/测试脚本；区分编译、安装、启动、模拟数据测试与真实接口测试。
 - 构建说明见 `docs/BUILD_IOS.md`、`docs/BUILD_ANDROID.md`；功能差异见 `docs/FEATURES.md`。
 - 本地开发和打包已获授权。发布仓库、上传安装包或安装用户真机须有对应指令。
+- 每次发版固定顺序：分支名用版本号（如 `2.4`）→ 推送 → 发对应 tag 的 Release 并附安装包与 `SHA256SUMS` → 最后把仓库默认分支切到该版本分支（`gh api -X PATCH /repos/Anyu1014/TiebaPure -f default_branch=<版本号>`，或在网页 Settings → Branches 修改）。默认分支始终指向最新发版。
