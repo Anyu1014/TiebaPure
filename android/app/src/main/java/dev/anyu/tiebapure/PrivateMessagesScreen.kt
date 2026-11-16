@@ -5,19 +5,13 @@ import android.graphics.Rect
 import android.graphics.Typeface
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
@@ -131,10 +125,6 @@ import java.util.UUID
 
 @Composable private fun PrivateMessagesScreen(vm: AppViewModel, account: Account, modifier: Modifier) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val voice = remember { PrivateVoiceRecorder(context) }
-    var image by remember { mutableStateOf<PrivateMessageImage?>(null) }
-    var preparing by remember { mutableStateOf(false) }
     var showEmoticons by remember { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<String?>(null) }
     var playVoice by remember { mutableStateOf<String?>(null) }
@@ -158,53 +148,22 @@ import java.util.UUID
     var recipientError by remember { mutableStateOf<String?>(null) }
     var action by remember { mutableStateOf<Job?>(null) }
     var active by remember { mutableStateOf(true) }
-    var microphoneGeneration by remember { mutableStateOf<Int?>(null) }
     val current = { active && account.sessionMatches(vm.account) }
     val hostView = androidx.compose.ui.platform.LocalView.current
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(15000)
-            if (current() && hostView.hasWindowFocus() && !loading && !sending && !markingRead && !preparing && !voice.recording && microphoneGeneration == null) revision++
+            if (current() && hostView.hasWindowFocus() && !loading && !sending && !markingRead) revision++
         }
     }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null && current()) {
-            preparing = true
-            val requestGeneration = generation
-            action = scope.launch {
-                try {
-                    val prepared = withContext(Dispatchers.IO) { PrivateMessageImage.read(context, uri) }
-                    ensureActive(); if (current() && generation == requestGeneration) image = prepared
-                } catch (e: CancellationException) { throw e }
-                catch (e: Exception) { if (current() && generation == requestGeneration) error = e.message }
-                finally { if (current() && generation == requestGeneration) preparing = false }
-            }
-        }
-    }
-    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        val requestGeneration = microphoneGeneration
-        microphoneGeneration = null
-        if (current() && requestGeneration == generation && selected != null) {
-            if (granted) runCatching { voice.start() }.onFailure { error = "无法开始录音，请稍后重试" }
-            else error = "请在系统设置中允许麦克风权限后录制语音"
-        }
-    }
-    LaunchedEffect(voice.error) { voice.error?.let { error = it } }
     fun openRecipient(user: User) {
         if (!current()) return
-        action?.cancel(); generation++; voice.discard(); image = null; preparing = false
+        action?.cancel(); generation++
         selected = PrivateConversation.recipient(user, account.uid)
         messages = emptyList(); draft = ""; uncertain = false; error = null; newMessage = false; chooseFollowing = false
     }
-    DisposableEffect(Unit) {
-        val lifecycle = (context as? androidx.lifecycle.LifecycleOwner)?.lifecycle
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP && voice.recording) runCatching { voice.stop() }.onFailure { error = it.message }
-        }
-        lifecycle?.addObserver(observer)
-        onDispose { active = false; action?.cancel(); voice.discard(); lifecycle?.removeObserver(observer) }
-    }
-    fun backToList() { action?.cancel(); generation++; voice.discard(); image = null; preparing = false; sending = false; selected = null; messages = emptyList(); draft = ""; uncertain = false; error = null }
+    DisposableEffect(Unit) { onDispose { active = false; action?.cancel() } }
+    fun backToList() { action?.cancel(); generation++; sending = false; selected = null; messages = emptyList(); draft = ""; uncertain = false; error = null }
     BackHandler(enabled = selected != null) { backToList() }
     LaunchedEffect(selected?.id, revision) {
         val requestGeneration = ++generation
@@ -235,7 +194,7 @@ import java.util.UUID
     }
     fun loadMore() {
         val before = cursor ?: return
-        if (loading || sending || preparing || voice.recording || microphoneGeneration != null) return
+        if (loading || sending) return
         loading = true
         val requestGeneration = generation
         val target = selected
@@ -285,7 +244,7 @@ import java.util.UUID
                 ) { Text("一键已读") }
                 TextButton(enabled = !markingRead, onClick = { recipient = ""; recipientError = null; chooseFollowing = false; newMessage = true }) { Text("发消息") }
             }
-            TextButton(onClick = { revision++ }, enabled = !loading && !sending && !markingRead && !preparing && !voice.recording && microphoneGeneration == null) { Text("刷新") }
+            TextButton(onClick = { revision++ }, enabled = !loading && !sending && !markingRead) { Text("刷新") }
         }
         error?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
         val peer = selected
@@ -314,16 +273,17 @@ import java.util.UUID
             val list = rememberLazyListState()
             LaunchedEffect(messages.lastOrNull()?.id) { if (messages.isNotEmpty() && !loading) list.animateScrollToItem(messages.lastIndex + if (hasMore) 1 else 0) }
             LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (hasMore) item { TextButton(onClick = { loadMore() }, enabled = !loading && !sending && !preparing && !voice.recording) { Text("加载更早消息") } }
+                if (hasMore) item { TextButton(onClick = { loadMore() }, enabled = !loading && !sending) { Text("加载更早消息") } }
                 if (messages.isEmpty() && !loading && error == null) item { EmptyMessage("暂无消息") }
                 items(messages, key = { it.id }) { item ->
                     val mine = item.senderId == account.uid
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (mine && item.read) Text("已读", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Surface(color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.medium) {
+                            val isImage = item.type == 2 && item.mediaURL != null
+                            Surface(color = when { isImage -> Color.Transparent; mine -> MaterialTheme.colorScheme.primaryContainer; else -> MaterialTheme.colorScheme.surfaceContainer }, shape = MaterialTheme.shapes.medium) {
                                 when {
-                                    item.type == 2 && item.mediaURL != null -> coil.compose.AsyncImage(item.mediaURL, "私信图片，点按查看", Modifier.sizeIn(maxWidth = 240.dp, maxHeight = 260.dp).clickable { previewImage = item.mediaURL }.padding(6.dp))
+                                    isImage -> coil.compose.AsyncImage(item.mediaURL, "私信图片，点按查看", Modifier.sizeIn(maxWidth = 240.dp, maxHeight = 260.dp).clickable { previewImage = item.mediaURL })
                                     item.voiceMD5 != null -> TextButton(onClick = { playVoice = PrivateMessageContent.voiceURL(item.voiceMD5) }) { Text("▶ 语音 ${item.duration}秒") }
                                     else -> NativeEmoticonText(TiebaEmoticon.parts(item.text), fontSize = 17.sp, modifier = Modifier.padding(12.dp).widthIn(max = 280.dp))
                                 }
@@ -335,26 +295,26 @@ import java.util.UUID
             }
             // The screen already reserves the keyboard inset supplied by FrostedAppShell.
             Column(Modifier.fillMaxWidth().testTag("private-chat-composer").padding(12.dp)) {
-                if (preparing) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (image != null) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(image!!.preview, "待发送图片", Modifier.size(56.dp))
-                    Text("图片将单独发送", Modifier.weight(1f).padding(horizontal = 8.dp), style = MaterialTheme.typography.labelSmall)
-                    TextButton(onClick = { image = null }, enabled = !sending) { Text("移除") }
-                }
-                if (voice.recording || voice.attachment != null) Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (voice.recording) "正在录音，最长60秒" else "语音 ${voice.duration}秒", Modifier.weight(1f))
-                    TextButton(onClick = voice::discard, enabled = !sending) { Text("取消录音") }
-                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconButton(onClick = {
-                        if (voice.recording) runCatching { voice.stop() }.onFailure { error = it.message }
-                        else { microphoneGeneration = generation; microphone.launch(android.Manifest.permission.RECORD_AUDIO) }
-                    }, modifier = Modifier.size(56.dp), enabled = !sending && !preparing && image == null && microphoneGeneration == null) {
-                        Icon(if (voice.recording) Icons.Default.Close else TiebaIcons.Microphone, if (voice.recording) "停止录音" else "录制语音", Modifier.size(24.dp))
-                    }
-                    OutlinedTextField(value = draft, onValueChange = { if (it.length <= 5000) draft = it }, placeholder = { Text("输入私信") }, modifier = Modifier.weight(1f).heightIn(min = 56.dp), shape = RoundedCornerShape(24.dp), maxLines = 5, enabled = !sending && !voice.recording)
-                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(56.dp), enabled = !sending && !voice.recording) { Icon(Icons.Default.Face, "贴吧表情", Modifier.size(24.dp)) }
-                    IconButton(onClick = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.size(56.dp), enabled = !sending && !preparing && !voice.recording && voice.attachment == null && microphoneGeneration == null) { Icon(TiebaIcons.Photo, "选择私信图片", Modifier.size(24.dp)) }
+                    OutlinedTextField(value = draft, onValueChange = { if (it.length <= 5000) draft = it }, placeholder = { Text("输入私信") }, modifier = Modifier.weight(1f).heightIn(min = 56.dp), shape = RoundedCornerShape(24.dp), maxLines = 5, enabled = !sending)
+                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(48.dp), enabled = !sending) { Icon(Icons.Default.Face, "贴吧表情", Modifier.size(24.dp)) }
+                    TextButton(contentPadding = PaddingValues(horizontal = 8.dp), enabled = !sending && !uncertain && !loading && draft.isNotBlank() && draft.length <= 5000, onClick = {
+                        if (!current() || sending || uncertain) return@TextButton
+                        sending = true; error = null
+                        val text = draft
+                        val requestGeneration = generation
+                        action = scope.launch {
+                            try {
+                                ensureActive(); if (!current() || generation != requestGeneration) return@launch
+                                val id = vm.api.sendPrivateMessage(account, peer, text, UUID.randomUUID().toString().replace("-", "").take(10).lowercase())
+                                ensureActive(); if (!current() || generation != requestGeneration) return@launch
+                                messages = messages + PrivateChatMessage(id, account.uid, text, System.currentTimeMillis() / 1000)
+                                draft = ""
+                            } catch (e: CancellationException) { throw e }
+                            catch (e: Exception) { if (current() && generation == requestGeneration) { uncertain = e is PrivateSendUnknown; error = e.message } }
+                            finally { if (current() && generation == requestGeneration) sending = false }
+                        }
+                    }) { Text(if (sending) "发送中" else "发送") }
                 }
                 if (showEmoticons) LazyRow(Modifier.fillMaxWidth().height(48.dp)) {
                     items(TiebaEmoticon.names.entries.toList()) { (id, label) ->
@@ -363,33 +323,6 @@ import java.util.UUID
                         }
                     }
                 }
-                TextButton(modifier = Modifier.align(Alignment.End), enabled = !sending && !uncertain && !loading && !preparing && !voice.recording && microphoneGeneration == null && (image != null || voice.attachment != null || draft.isNotBlank() && draft.length <= 5000), onClick = {
-                    if (!current() || sending || uncertain) return@TextButton
-                    sending = true; error = null
-                    val text = draft
-                    val attachment = image
-                    val audio = voice.attachment
-                    val duration = voice.duration
-                    val requestGeneration = generation
-                    action = scope.launch {
-                        try {
-                            ensureActive(); if (!current() || generation != requestGeneration) return@launch
-                            val type: Int
-                            val payload = when {
-                                attachment != null -> { type = 2; vm.api.uploadPrivateImage(account, attachment.bytes, attachment.width, attachment.height) }
-                                audio != null -> { type = 3; vm.api.uploadPrivateVoice(account, audio.readBytes(), duration) }
-                                else -> { type = 1; text }
-                            }
-                            ensureActive(); if (!current() || generation != requestGeneration) return@launch
-                            val id = vm.api.sendPrivateMessage(account, peer, payload, UUID.randomUUID().toString().replace("-", "").take(10).lowercase(), type)
-                            ensureActive(); if (!current() || generation != requestGeneration) return@launch
-                            messages = messages + PrivateChatMessage(id, account.uid, if (type == 1) text else if (type == 2) "[图片消息]" else "[语音消息]", System.currentTimeMillis() / 1000, type, if (type == 2) PrivateMessageContent.imageURL(payload) else null, if (type == 3) PrivateMessageContent.voiceMD5(payload) else null, if (type == 3) duration else 0)
-                            if (type == 1) draft = "" else if (type == 2) image = null else voice.discard()
-                        } catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { if (current() && generation == requestGeneration) { uncertain = e is PrivateSendUnknown; error = e.message } }
-                        finally { if (current() && generation == requestGeneration) sending = false }
-                    }
-                }) { Text(if (sending) "发送中" else if (image != null) "发送图片" else if (voice.attachment != null) "发送语音" else "发送") }
             }
         }
     }

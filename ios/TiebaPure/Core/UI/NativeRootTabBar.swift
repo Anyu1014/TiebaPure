@@ -58,6 +58,9 @@ struct NativeRootTabBarPresentation: UIViewControllerRepresentable {
             let layoutFrame = CGRect(x: bar.center.x - bar.bounds.width / 2, y: bar.center.y - bar.bounds.height / 2,
                                      width: bar.bounds.width, height: bar.bounds.height)
             let frame = bar.superview?.convert(layoutFrame, to: nil) ?? .zero
+            if !bar.isHidden, bar.window != nil, !frame.isEmpty {
+                state.rememberVisibleFrame(frame)
+            }
             if frame != lastFrame {
                 lastFrame = frame
                 DispatchQueue.main.async { [weak self] in
@@ -78,21 +81,27 @@ struct NativeRootTabBarPresentation: UIViewControllerRepresentable {
 }
 
 @MainActor
-final class NativeRootTabBarState {
-    private struct ItemStyle {
-        let item: UITabBarItem
-        let title: String?
-        let accessibilityLabel: String?
-        let insets: UIEdgeInsets
-        let image: UIImage?
-        let selectedImage: UIImage?
+struct NativeRootTabLabel: View {
+    let title: String
+    let symbol: String
+    let showsLabels: Bool
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        Label { Text(title) } icon: { image }
     }
-    private weak var bar: UITabBar?
-    private weak var owner: AnyObject?
-    private weak var tabController: UITabBarController?
-    private var styles: [ItemStyle] = []
-    private var restoreTabArtwork: [ObjectIdentifier: () -> Void] = [:]
-    private lazy var iconOnlyArtwork = [
+
+    private var image: Image {
+        if #available(iOS 26.0, *), !showsLabels {
+            let portrait = UIDevice.current.userInterfaceIdiom == .phone && verticalSizeClass != .compact
+            if let artwork = (portrait ? Self.portraitArtwork : Self.iconOnlyArtwork)[title] {
+                return Image(uiImage: artwork)
+            }
+        }
+        return Image(systemName: symbol)
+    }
+
+    private static let iconOnlyArtwork = [
         "首页": "house.fill", "进吧": "square.grid.2x2.fill", "我的": "person.crop.circle.fill"
     ].compactMapValues { symbol in
         // Match the 2.1 glyph without the system symbol's selected-state scaling.
@@ -101,12 +110,28 @@ final class NativeRootTabBarState {
         renderer.scale = 3
         return renderer.uiImage?.withRenderingMode(.alwaysTemplate)
     }
-    private lazy var portraitArtwork = iconOnlyArtwork.reduce(into: [String: UIImage]()) { artwork, entry in
+    private static let portraitArtwork = iconOnlyArtwork.reduce(into: [String: UIImage]()) { artwork, entry in
         let outward: CGFloat = entry.key == "首页" ? 3 : entry.key == "我的" ? -3 : 0
         // Offset the blank-title layout to the center of the iPhone glass capsule.
         let insets = UIEdgeInsets(top: -7, left: outward, bottom: 7, right: -outward)
         artwork[entry.key] = entry.value.withAlignmentRectInsets(insets)
     }
+}
+
+@MainActor
+final class NativeRootTabBarState {
+    private(set) var lastVisibleFrame = CGRect.zero
+    func rememberVisibleFrame(_ frame: CGRect) { lastVisibleFrame = frame }
+    private struct ItemStyle {
+        let item: UITabBarItem
+        let title: String?
+        let accessibilityLabel: String?
+        let insets: UIEdgeInsets
+    }
+    private weak var bar: UITabBar?
+    private weak var owner: AnyObject?
+    private weak var tabController: UITabBarController?
+    private var styles: [ItemStyle] = []
     private var collapsed: Bool?
     private var animator: UIViewPropertyAnimator?
     private var fadeAnimator: UIViewPropertyAnimator?
@@ -177,7 +202,7 @@ final class NativeRootTabBarState {
             restoreItemStyles()
             styles = items.map { item in
                 ItemStyle(item: item, title: item.title, accessibilityLabel: item.accessibilityLabel,
-                          insets: item.imageInsets, image: item.image, selectedImage: item.selectedImage)
+                          insets: item.imageInsets)
             }
             self.showsLabels = nil
         }
@@ -186,19 +211,14 @@ final class NativeRootTabBarState {
         let labelsChanged = self.showsLabels != showsLabels || titlesReconfigured
         self.showsLabels = showsLabels
 
-        func updateArtwork() {
+        func updateTitles() {
             if showsLabels {
                 if labelsChanged { restoreItemStyles() }
-                restoreNativeTabArtwork()
                 return
             }
 
-            let traits = tabController?.traitCollection ?? bar.traitCollection
-            let portrait = traits.userInterfaceIdiom == .phone && traits.verticalSizeClass != .compact
-            let artwork = portrait ? portraitArtwork : iconOnlyArtwork
-            if #available(iOS 26.0, *) { applyNativeTabArtwork(artwork) }
-            for style in styles {
-                if labelsChanged {
+            if labelsChanged {
+                for style in styles {
                     // Keep a title line in both glass layers to preserve the native bar's size.
                     style.item.accessibilityLabel = style.accessibilityLabel ?? style.title
                     style.item.title = blankTitle
@@ -207,56 +227,24 @@ final class NativeRootTabBarState {
                     insets.bottom -= 6
                     style.item.imageInsets = insets
                 }
-                guard let icon = style.title.flatMap({ artwork[$0] }) else { continue }
-                if !matchesArtwork(style.item.image, icon) { style.item.image = icon }
-                if !matchesArtwork(style.item.selectedImage, icon) { style.item.selectedImage = icon }
             }
         }
 
-        // Commit the selected and unselected artwork together when toggling titles.
+        // Keep title visibility synchronized while SwiftUI owns every tab image.
         if labelsChanged {
             if #available(iOS 27.0, *), let tabController {
                 if animated {
-                    tabController.performBatchUpdates(updateArtwork)
+                    tabController.performBatchUpdates(updateTitles)
                 } else {
-                    UIView.performWithoutAnimation { tabController.performBatchUpdates(updateArtwork) }
+                    UIView.performWithoutAnimation { tabController.performBatchUpdates(updateTitles) }
                 }
             } else {
-                UIView.performWithoutAnimation(updateArtwork)
+                UIView.performWithoutAnimation(updateTitles)
             }
             bar.setNeedsLayout()
         } else {
-            updateArtwork()
+            updateTitles()
         }
-    }
-
-    private func matchesArtwork(_ current: UIImage?, _ icon: UIImage) -> Bool {
-        guard let current, let pixels = icon.cgImage else { return false }
-        return current.cgImage === pixels && current.alignmentRectInsets == icon.alignmentRectInsets
-    }
-
-    @available(iOS 26.0, *)
-    private func applyNativeTabArtwork(_ artwork: [String: UIImage]) {
-        for tab in tabController?.tabs ?? [] {
-            guard let icon = artwork[tab.title] else { continue }
-            let id = ObjectIdentifier(tab)
-            if restoreTabArtwork[id] == nil {
-                let original = tab.image
-                let selected = if #available(iOS 26.1, *) { tab.selectedImage } else { nil as UIImage? }
-                restoreTabArtwork[id] = { [weak tab] in
-                    tab?.image = original
-                    if #available(iOS 26.1, *) { tab?.selectedImage = selected }
-                }
-            }
-            if !matchesArtwork(tab.image, icon) { tab.image = icon }
-            if #available(iOS 26.1, *), !matchesArtwork(tab.selectedImage, icon) { tab.selectedImage = icon }
-        }
-    }
-
-    private func restoreNativeTabArtwork() {
-        let restorations = restoreTabArtwork.values
-        restoreTabArtwork.removeAll()
-        for restoreImage in restorations { restoreImage() }
     }
 
     func restore(ifOwnedBy owner: AnyObject? = nil) {
@@ -266,7 +254,6 @@ final class NativeRootTabBarState {
         if fadeAnimator?.state == .active { fadeAnimator?.stopAnimation(true) }
         fadeAnimator = nil
         restoreItemStyles()
-        restoreNativeTabArtwork()
         if collapsed == true {
             bar?.alpha = 1
             bar?.transform = .identity
@@ -287,8 +274,6 @@ final class NativeRootTabBarState {
             style.item.title = style.title
             style.item.accessibilityLabel = style.accessibilityLabel
             style.item.imageInsets = style.insets
-            style.item.image = style.image
-            style.item.selectedImage = style.selectedImage
         }
     }
 }

@@ -428,7 +428,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     val replyTarget = if (r.kind == "subposts") InlineReplyTarget(r.title, r.id, r.extra.substringBefore(':')) else p?.let { InlineReplyTarget(it.thread.forum, r.id) }
-    FloatingReplyReader(vm, padding, showReplyBar, replyTarget) { readerModifier ->
+    FloatingReplyReader(vm, showReplyBar, replyTarget) { readerModifier ->
     PullRefreshContent(vm, readerModifier, padding.calculateTopPadding()) {
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), state = scroll, contentPadding = listPadding) {
         if (p != null) item {

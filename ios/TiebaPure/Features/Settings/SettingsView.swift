@@ -34,6 +34,10 @@ struct SettingsView: View {
                     ForEach(BottomBarPosition.allCases) { position in Text(position.title).tag(position) }
                 }
                 .accessibilityIdentifier("settings-bottom-bar-position")
+                Picker("回复栏收缩后位置", selection: Binding(get: { appearanceStore.replyBarPosition }, set: appearanceStore.setReplyBarPosition)) {
+                    ForEach(BottomBarPosition.allCases) { position in Text(position.title).tag(position) }
+                }
+                .accessibilityIdentifier("settings-reply-bar-position")
             } header: {
                 HStack(alignment: .firstTextBaseline, spacing: TiebaPureTheme.Spacing.sm) {
                     Text("显示模式")

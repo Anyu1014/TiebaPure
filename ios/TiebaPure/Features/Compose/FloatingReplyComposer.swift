@@ -14,6 +14,7 @@ private struct FloatingReplyComposerModifier: ViewModifier {
     let resetTarget: () -> Void
     @EnvironmentObject private var environment: AppEnvironment
     @EnvironmentObject private var appearance: AppAppearanceStore
+    @Environment(\.nativeRootTabBarState) private var nativeBarState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var motion = BottomBarMotion()
     @State private var collapsed = false
@@ -30,13 +31,16 @@ private struct FloatingReplyComposerModifier: ViewModifier {
                         .overlay(alignment: .bottom) {
                             GeometryReader { geometry in
                                 let width = min(480, max(62, geometry.size.width - 40))
-                                let offset = max(0, (geometry.size.width - 40 - 62) / 2) * CGFloat(appearance.bottomBarPosition.fraction)
+                                let offset = max(0, (geometry.size.width - 40 - 62) / 2) * CGFloat(appearance.replyBarPosition.fraction)
+                                let nativeFrame = nativeBarState?.lastVisibleFrame ?? .zero
+                                let bottomPadding = ReplyBarGeometry.bottomPadding(referenceTop: nativeFrame.isEmpty ? nil : nativeFrame.minY,
+                                                                                   containerBottom: geometry.frame(in: .global).maxY, editing: editing)
                                 ReplyBarTransition(collapsed: compact, progress: compact ? 1 : 0,
                                                    expandedWidth: width, compactOffset: offset,
                                                    expanded: editor(for: target), expand: expand)
                                     .animation(reduceMotion ? nil : .floatingBarSpring, value: compact)
                                     .animation(reduceMotion ? nil : .floatingBarSpring, value: offset)
-                                    .padding(.bottom, 8)
+                                    .padding(.bottom, bottomPadding)
                                     // Extra rows grow above the keyboard-anchored input.
                                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .bottom)
                             }

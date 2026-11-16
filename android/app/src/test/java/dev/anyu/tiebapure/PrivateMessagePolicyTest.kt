@@ -103,9 +103,9 @@ class PrivateMessagePolicyTest {
         val voice = """[{"voice_md5":"0123456789abcdef0123456789abcdef","during_time":4,"has_read":0}]"""
         assertEquals("0123456789abcdef0123456789abcdef", PrivateMessageContent.voiceMD5(voice))
         assertEquals(4, PrivateMessageContent.duration(voice))
-        assertTrue(runCatching { PrivateMessageContent.validate(image, 2) }.isSuccess)
-        assertTrue(runCatching { PrivateMessageContent.validate(voice, 3) }.isSuccess)
-        assertTrue(runCatching { PrivateMessageContent.validate("[]", 2) }.isFailure)
+        assertTrue(runCatching { PrivateMessageContent.validate("你好") }.isSuccess)
+        assertTrue(runCatching { PrivateMessageContent.validate("") }.isFailure)
+        assertTrue(runCatching { PrivateMessageContent.validate("a".repeat(5001)) }.isFailure)
     }
     private fun hex(s: String) = s.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     @Test fun independentOfficialWireAndCryptoFixture() {

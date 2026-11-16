@@ -14,7 +14,9 @@ enum PrivateVoiceUpload {
         let session = injectedSession ?? VoiceAudioClient.makeSession()
         defer { if injectedSession == nil { session.invalidateAndCancel() } }
         let client = TiebaHTTPClient(session: session, maximumResponseBytes: 65_536)
-        let (common, headers) = await PrivateMessageMediaUpload.requestContext(account: account, clientID: clientID)
+        let bootstrap = try await injectedSession == nil ? TiebaPostingBootstrap.live().bootstrap(bduss: account.bduss) : nil
+        try Task.checkCancellation()
+        let (common, headers) = await PrivateMessageMediaUpload.requestContext(account: account, clientID: clientID, bootstrap: bootstrap)
         let chunkSize = 30_720
         for (index, offset) in stride(from: 0, to: size, by: chunkSize).enumerated() {
             try Task.checkCancellation()
@@ -35,6 +37,9 @@ enum PrivateVoiceUpload {
               let voiceID = VoiceAudioURLPolicy.normalizedVoiceID(rawID) else { throw ContentSubmissionError.unsupported(message: "私信语音上传收据缺少有效 voice_md5。") }
         let voice: [String: Any] = ["type": 10, "voice_md5": voiceID, "during_time": duration, "has_read": 0, "isUploaded": true]
         return String(decoding: try JSONSerialization.data(withJSONObject: [voice]), as: UTF8.self)
-        } catch { throw PrivateMessageMediaUpload.uploadError(error, kind: "语音") }
+        } catch {
+            await PrivateMessageMediaUpload.diagnoseTargetHostIfNeeded(error, account: account, injectedSession: injectedSession)
+            throw PrivateMessageMediaUpload.uploadError(error, kind: "语音")
+        }
     }
 }

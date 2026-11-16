@@ -60,7 +60,9 @@ enum PrivateMessageContent {
         return VoiceAudioURLPolicy.normalizedVoiceID(value)
     }
     static func duration(_ content: String) -> Int {
-        Int(min(max(integer(body(content)?["during_time"]) ?? 0, 0), 600))
+        guard let value = body(content)?["during_time"],
+              let seconds = Double(String(describing: value)), seconds.isFinite else { return 0 }
+        return Int(min(max(seconds, 0), 600).rounded(.up))
     }
     static func validate(_ content: String, type: Int) throws {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

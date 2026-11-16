@@ -84,11 +84,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var fontSize by mutableFloatStateOf(store.prefs.getFloat("font-size", 17f))
     var manualMedia by mutableStateOf(store.prefs.getBoolean("manual-media", false))
     var bottomBarPosition by mutableStateOf(BottomBarPosition.stored(store.prefs.getString("bottom-bar-position", null))); private set
+    var replyBarPosition by mutableStateOf(loadReplyBarPosition(store.prefs, bottomBarPosition)); private set
     var bottomBarShowsLabels by mutableStateOf(store.prefs.getBoolean("bottom-bar-labels", true)); private set
     var bottomBarAutoCollapse by mutableStateOf(store.prefs.getBoolean("bottom-bar-auto-collapse", true)); private set
     fun setBottomBarPreferences(position: BottomBarPosition = bottomBarPosition, showsLabels: Boolean = bottomBarShowsLabels, autoCollapse: Boolean = bottomBarAutoCollapse) {
         store.prefs.edit().putString("bottom-bar-position", position.key).putBoolean("bottom-bar-labels", showsLabels).putBoolean("bottom-bar-auto-collapse", autoCollapse).apply()
         bottomBarPosition = position; bottomBarShowsLabels = showsLabels; bottomBarAutoCollapse = autoCollapse
+    }
+    fun selectReplyBarPosition(position: BottomBarPosition) {
+        store.prefs.edit().putString("reply-bar-position", position.key).apply(); replyBarPosition = position
     }
     var newThreadsEnabled by mutableStateOf(store.prefs.getBoolean("allow-new-threads", true)); private set
     var repliesEnabled by mutableStateOf(store.prefs.getBoolean("allow-replies", true)); private set

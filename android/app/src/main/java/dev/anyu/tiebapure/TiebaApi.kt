@@ -178,11 +178,11 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         if(before == null) inbox.merge(officialPull(a,inbox.state.groupsList))
         inbox.messages(peer.userId,before)
     }
-    internal suspend fun sendPrivateMessage(a: Account, peer: PrivateConversation, text: String, key: String, type: Int = 1): String = privateLock.withLock {
-        PrivateMessageContent.validate(text, type)
+    internal suspend fun sendPrivateMessage(a: Account, peer: PrivateConversation, text: String, key: String): String = privateLock.withLock {
+        PrivateMessageContent.validate(text)
         Policy.signedId(peer.userId); require(peer.userId != a.uid)
         val record = System.currentTimeMillis()
-        val request = dev.anyu.tiebapure.official.OfficialIM.CommitRequest.newBuilder().setData(dev.anyu.tiebapure.official.OfficialIM.CommitData.newBuilder().setToUid(peer.userId.toLong()).setToUserType(0).setMsgType(type).setContent(text).setRecordId(record)).build()
+        val request = dev.anyu.tiebapure.official.OfficialIM.CommitRequest.newBuilder().setData(dev.anyu.tiebapure.official.OfficialIM.CommitData.newBuilder().setToUid(peer.userId.toLong()).setToUserType(0).setMsgType(1).setContent(text).setRecordId(record)).build()
         val response = try { officialSend(a,request) }
         catch(e: PrivateMessageRejected) { throw e }
         catch(e: kotlinx.coroutines.CancellationException) { throw e }
@@ -191,89 +191,8 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         if(response.error.code != 0) throw PrivateMessageRejected(response.error.code.toLong())
         val receipt = response.data
         if(receipt.id <= 0 || receipt.toUid.toString() != peer.userId || receipt.recordId != record) throw PrivateSendUnknown()
-        try { inbox(a).sent(peer,a,text,receipt,type) } catch(_: Exception) { throw PrivateSendUnknown() }
+        try { inbox(a).sent(peer,a,text,receipt,1) } catch(_: Exception) { throw PrivateSendUnknown() }
         receipt.id.toString()
-    }
-
-    internal suspend fun uploadPrivateVoice(a: Account, audio: ByteArray, duration: Int): String {
-        require(audio.size in 1..2 * 1024 * 1024 && duration in 1..60) { "语音限60秒，文件不能超过2MB" }
-        require(audio.take(6).toByteArray().contentEquals("#!AMR\n".toByteArray()) || audio.size >= 44 && audio.copyOfRange(0, 4).contentEquals("RIFF".toByteArray()) && audio.copyOfRange(8, 12).contentEquals("WAVE".toByteArray())) { "语音格式无效，请重新录制" }
-        val digest = java.security.MessageDigest.getInstance("MD5").digest(audio).joinToString("") { "%02x".format(it) }
-        val common = privateUploadFields(a)
-        val chunkSize = 30720
-        for ((index, offset) in (audio.indices step chunkSize).withIndex()) {
-            kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            val end = minOf(offset + chunkSize, audio.size)
-            val fields = common + mapOf("chunk_md5" to digest, "voice_md5" to digest, "length" to (end - offset).toString(), "offset" to offset.toString(), "total_length" to audio.size.toString(), "chunk_no" to (index + 1).toString(), "total_num" to ((audio.size + chunkSize - 1) / chunkSize).toString())
-            val body = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
-                (fields + ("sign" to Policy.sign(fields))).toSortedMap().forEach { (key, value) -> addFormDataPart(key, value) }
-                addFormDataPart("voice_chunk", "file", audio.copyOfRange(offset, end).toRequestBody())
-            }.build()
-            val response = privateUploadResponse(bytes(Request.Builder().url("$social/c/c/voice/chunkupload").post(body).headers(privateUploadHeaders(a)).build(), 65536), "语音")
-            validatePrivateUpload(response, "语音")
-        }
-        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-        val response = form("$social/c/c/voice/voice_fin_chunk_upload", common + mapOf("voice_md5" to digest, "type" to "2"), headers = privateUploadHeaders(a).toMultimap().mapValues { it.value.single() }, maximumBytes = 65536)
-        validatePrivateUpload(response, "语音")
-        val voiceID = response.optJSONObject("info")?.optString("voice_md5")?.let(PrivateMessageContent::voiceID)
-            ?: error("语音上传未返回有效收据")
-        return JSONArray().put(JSONObject().put("type", 10).put("voice_md5", voiceID).put("during_time", duration).put("has_read", 0).put("isUploaded", true)).toString()
-    }
-
-    internal suspend fun uploadPrivateImage(a: Account, bytes: ByteArray, width: Int, height: Int): String {
-        require(bytes.size in 1..10 * 1024 * 1024 && width in 1..20000 && height in 1..20000 && width.toLong() * height <= 80000000) { "私信图片无效或过大" }
-        val common = privateUploadFields(a)
-        val groupId = privateLock.withLock {
-            val store = inbox(a)
-            if (store.state.groupsList.none { it.type == 6 && it.id > 0 }) store.merge(officialPull(a, store.state.groupsList))
-            store.state.groupsList.firstOrNull { it.type == 6 && it.id > 0 }?.id ?: error("未取得当前账号的私信图片上传分组，请刷新会话后重试")
-        }
-        val chunkSize = 512000
-        val digest = java.security.MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02X".format(it) }
-        var result = JSONObject()
-        for ((index, offset) in (bytes.indices step chunkSize).withIndex()) {
-            kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            val end = minOf(offset + chunkSize, bytes.size)
-            val body = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
-                val fields = common + mapOf("resourceId" to digest + chunkSize, "chunkNo" to (index + 1).toString(), "isFinish" to if (end == bytes.size) "1" else "0", "size" to bytes.size.toString(), "width" to width.toString(), "height" to height.toString(), "groupId" to groupId.toString(), "alt" to "json", "is_bjh" to "0", "saveOrigin" to "1", "pic_water_type" to "3")
-                (fields + ("sign" to Policy.sign(fields))).forEach { (key, value) -> addFormDataPart(key, value) }
-                addFormDataPart("chunk", "file", bytes.copyOfRange(offset, end).toRequestBody())
-            }.build()
-            result = privateUploadResponse(this.bytes(Request.Builder().url("$social/c/s/uploadPicture").post(body).headers(privateUploadHeaders(a)).build(), 65536), "图片")
-            validatePrivateUpload(result, "图片")
-        }
-        return privateImageContent(result, width, height)
-    }
-    internal fun privateImageContent(result: JSONObject, width: Int, height: Int): String {
-        validatePrivateUpload(result, "图片")
-        val info = result.optJSONObject("picInfo") ?: error("私信图片上传响应缺少 picInfo 收据")
-        fun imageURL(key: String) = Policy.mediaUrl(info.optJSONObject(key)?.optString("picUrl").orEmpty().replaceFirst("http://", "https://"))
-        val url = listOf("originPic", "bigPic", "smallPic").firstNotNullOfOrNull(::imageURL) ?: error("私信图片上传收据缺少有效图片地址")
-        val thumbnail = imageURL("smallPic") ?: url
-        return JSONArray().put(JSONObject().put("src", thumbnail).put("big_src", url).put("type", "3").put("bsize", "$width,$height")).toString()
-    }
-
-    private val privateUploadVersion = "22.13.1.1"
-
-    private fun privateUploadFields(account: Account): Map<String, String> {
-        require(Policy.cookie(account.bduss) && Policy.cookie(account.stoken)) { "账号凭据格式无效" }
-        return officialFields(privateUploadVersion) + mapOf(
-            "BDUSS" to account.bduss, "stoken" to account.stoken, "cuid" to clientId,
-            "cuid_galaxy2" to clientId, "support_image" to "jepgwebp",
-        )
-    }
-
-    private fun privateUploadHeaders(account: Account): Headers = Headers.Builder()
-        .add("User-Agent", "bdtb for Android $privateUploadVersion")
-        .add("Cookie", "CUID=$clientId; ka=open; BDUSS=${account.bduss}; stoken=${account.stoken}")
-        .add("cuid", clientId)
-        .add("cuid_galaxy2", clientId)
-        .build()
-    private fun privateUploadResponse(data: ByteArray, kind: String): JSONObject = try { JSONObject(data.toString(Charsets.UTF_8)) }
-        catch (_: org.json.JSONException) { error("私信${kind}上传响应格式无法识别") }
-    private fun validatePrivateUpload(response: JSONObject, kind: String) {
-        val code = SubmissionPolicy.strictInt(response.optJSONObject("error")?.opt("errno") ?: response.opt("error_code")) ?: error("私信${kind}上传响应缺少有效状态码")
-        check(code == 0) { "私信${kind}上传未通过（错误码 $code）" }
     }
 
     suspend fun home(account: Account?, page: Int): List<Thread> {

@@ -14,11 +14,6 @@ object TiebaIcons {
             path(stroke = SolidColor(Color.Black), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round, pathBuilder = draw)
         }.build()
     val Comment = outline("Comment") { moveTo(5f, 3f); lineTo(19f, 3f); quadTo(22f, 3f, 22f, 6f); lineTo(22f, 15f); quadTo(22f, 18f, 19f, 18f); lineTo(10f, 18f); lineTo(4f, 22f); lineTo(4f, 18f); quadTo(2f, 18f, 2f, 15f); lineTo(2f, 6f); quadTo(2f, 3f, 5f, 3f); close() }
-    val Microphone = outline("Microphone") {
-        moveTo(9f, 5f); curveTo(9f, 1f, 15f, 1f, 15f, 5f); lineTo(15f, 11f); curveTo(15f, 15f, 9f, 15f, 9f, 11f); close()
-        moveTo(5f, 10f); lineTo(5f, 12f); curveTo(5f, 20f, 19f, 20f, 19f, 12f); lineTo(19f, 10f)
-        moveTo(12f, 18f); lineTo(12f, 22f); moveTo(9f, 22f); lineTo(15f, 22f)
-    }
     val Photo = outline("Photo") {
         moveTo(5f, 3f); lineTo(19f, 3f); quadTo(22f, 3f, 22f, 6f); lineTo(22f, 18f); quadTo(22f, 21f, 19f, 21f); lineTo(5f, 21f); quadTo(2f, 21f, 2f, 18f); lineTo(2f, 6f); quadTo(2f, 3f, 5f, 3f); close()
         moveTo(3f, 17f); lineTo(9f, 11f); lineTo(13f, 15f); lineTo(17f, 11f); lineTo(22f, 16f)

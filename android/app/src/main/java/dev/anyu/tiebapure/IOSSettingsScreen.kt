@@ -46,6 +46,11 @@ import androidx.compose.ui.unit.*
                 Spacer(Modifier.height(12.dp))
                 IOSSegmentedControl(BottomBarPosition.entries.map { it to it.title }, vm.bottomBarPosition, { vm.setBottomBarPreferences(position = it) }, Modifier.fillMaxWidth())
             }
+            Column(Modifier.padding(16.dp)) {
+                Text("回复栏收缩后位置", fontSize = 17.sp)
+                Spacer(Modifier.height(12.dp))
+                IOSSegmentedControl(BottomBarPosition.entries.map { it to it.title }, vm.replyBarPosition, { vm.selectReplyBarPosition(it) }, Modifier.fillMaxWidth())
+            }
         } }
         item { GroupHeader("内容") }
         item { IOSGroup {

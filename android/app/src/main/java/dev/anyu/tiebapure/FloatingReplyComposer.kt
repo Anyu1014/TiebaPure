@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
-@Composable internal fun FloatingReplyReader(vm: AppViewModel, padding: PaddingValues, visible: Boolean, defaultTarget: InlineReplyTarget?, content: @Composable (Modifier) -> Unit) {
+@Composable internal fun FloatingReplyReader(vm: AppViewModel, visible: Boolean, defaultTarget: InlineReplyTarget?, content: @Composable (Modifier) -> Unit) {
     val target = vm.inlineReplyTarget?.takeIf { it.thread == defaultTarget?.thread && (vm.route.kind != "subposts" || it.parent == defaultTarget?.parent) } ?: defaultTarget
     val motion = remember(vm.route, vm.account?.uid, vm.bottomBarAutoCollapse) { BottomBarMotion() }
     var collapsed by remember(motion) { mutableStateOf(false) }
@@ -47,13 +47,14 @@ import androidx.compose.ui.viewinterop.AndroidView
         content(Modifier.fillMaxSize().onGloballyPositioned { origin = it.localToScreen(Offset.Zero) }.drawWithContent {
             layer.record { this@drawWithContent.drawContent() }; drawLayer(layer)
         })
-        if (visible && target != null) BoxWithConstraints(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = padding.calculateBottomPadding())) {
+        val bottom = maxOf(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), WindowInsets.ime.asPaddingValues().calculateBottomPadding())
+        if (visible && target != null) BoxWithConstraints(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = bottom + 8.dp)) {
             val compact = collapsed && vm.bottomBarAutoCollapse
-            val width by animateDpAsState(if (compact) 62.dp else minOf(maxWidth, 480.dp), spring(dampingRatio = 1f, stiffness = 380f), label = "reply-width")
-            val alignment = if (!compact) Alignment.BottomCenter else when (vm.bottomBarPosition) { BottomBarPosition.LEFT -> Alignment.BottomStart; BottomBarPosition.CENTER -> Alignment.BottomCenter; BottomBarPosition.RIGHT -> Alignment.BottomEnd }
+            val width by animateDpAsState(if (compact) IOSLayout.barHeight else minOf(maxWidth, 480.dp), spring(dampingRatio = 1f, stiffness = 380f), label = "reply-width")
+            val alignment = if (!compact) Alignment.BottomCenter else when (vm.replyBarPosition) { BottomBarPosition.LEFT -> Alignment.BottomStart; BottomBarPosition.CENTER -> Alignment.BottomCenter; BottomBarPosition.RIGHT -> Alignment.BottomEnd }
             Column(Modifier.align(alignment).width(width)) {
                 if (compact) {
-                    AnyuFrostedSurface(layer, origin, Modifier.size(62.dp), CircleShape) {
+                    AnyuFrostedSurface(layer, origin, Modifier.size(IOSLayout.barHeight), CircleShape) {
                         IconButton(onClick = { motion.expand(); collapsed = false }, modifier = Modifier.fillMaxSize().testTag("thread-reply-collapsed")) { Icon(TiebaIcons.Comment, "展开回复输入框") }
                     }
                 } else key(target, vm.account?.uid) {
@@ -110,7 +111,7 @@ import androidx.compose.ui.viewinterop.AndroidView
         }
     }
     if (mentions && account != null) FollowedPrivateRecipientPicker(vm, account, onDismiss = { mentions = false }, onSelected = { user -> editor.view?.insertToken("@" + user.mentionName + " "); mentions = false })
-    AnyuFrostedSurface(backdrop.layer, backdrop.origin, Modifier.fillMaxWidth().height(62.dp).testTag("thread-reply-bar")) {
+    AnyuFrostedSurface(backdrop.layer, backdrop.origin, Modifier.fillMaxWidth().height(IOSLayout.barHeight).testTag("thread-reply-bar")) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             AndroidView(modifier = Modifier.weight(3f).padding(start = 8.dp).height(44.dp).testTag("thread-reply-input"), factory = { NativeComposerEditText(it).also { view ->
                 editor.view = view; view.minLines = 1; view.maxLines = 3; view.gravity = Gravity.CENTER_VERTICAL

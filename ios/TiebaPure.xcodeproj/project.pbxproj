@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0008379A2FC3B5ADF0055850 /* PrivateAMRDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260CD478C4A8B6DBD1135383 /* PrivateAMRDecoderTests.swift */; };
 		03BFC1CB27519F2A9851619C /* ContentDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A1C1C285AED2131947564A /* ContentDraft.swift */; };
 		043AF9BB1E2EF30D61B1DC63 /* SwiftDataOrderedCollectionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67285F50B29BA765B74B5271 /* SwiftDataOrderedCollectionPersistence.swift */; };
 		06132F36C724DF5F6A7409D5 /* ThreadDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1626D4B0DD88E88576EBC2EB /* ThreadDetailView.swift */; };
@@ -112,6 +113,7 @@
 		5BC60D81A144316FA7381D09 /* LegacyScrollTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC309A0384A60EB41BF7B46 /* LegacyScrollTelemetry.swift */; };
 		5C55104E13B0C728DDDAD257 /* Page.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7D805CD76F1E84BC119F98 /* Page.pb.swift */; };
 		5C75A4BE925EE2D5EBB01684 /* SubPostList.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9DDCEE2EB7CAB5604D83C90 /* SubPostList.pb.swift */; };
+		5CE1647F778B9C537242EC00 /* OpenCoreAMR-Apache-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0D351BD61580A9A27704E700 /* OpenCoreAMR-Apache-2.0.txt */; };
 		5D3A1C3A24FCE9EBC49980BB /* PrivateMessageMediaUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495D060C44570463A821D156 /* PrivateMessageMediaUpload.swift */; };
 		5DF9D42AF53D712C923B9A3D /* TiebaSearchAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8606C99A4A56953BB1FA0ED /* TiebaSearchAPI.swift */; };
 		5FE25FDC40B4F42C42A3787C /* CommonRequest.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374582F532CC1815B25EC4EB /* CommonRequest.pb.swift */; };
@@ -180,6 +182,7 @@
 		B5EC9216076BE5E4C2EF8721 /* TiebaPureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41F406332470AF7C30B532A5 /* TiebaPureApp.swift */; };
 		B673FC1D9439E3D10DF147C0 /* UserProfileMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1C4599FA7188B0D810AE19 /* UserProfileMutationTests.swift */; };
 		B744513E4012208DC9BA3056 /* ContentSubmissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3B9F1DB7C284253E1A90DCA /* ContentSubmissionCoordinatorTests.swift */; };
+		B74D36C1CE395E4FFC5C3D76 /* PrivateAMRDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07CCB58C3C7C199C205692DA /* PrivateAMRDecoder.swift */; };
 		B7F5996AE366FA555C2F03AD /* BottomBarMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCDB7BC91B8869659EB0CBF /* BottomBarMotionTests.swift */; };
 		BA947B7FC2481A14D2ACA3E8 /* ContentDraftRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A071B510D35F21B1329B0350 /* ContentDraftRecoveryTests.swift */; };
 		BAAF1F7F1D2CF2273CCB713A /* FloatingReplyComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FD5940E3EBFF3F37D5AB696 /* FloatingReplyComposer.swift */; };
@@ -193,6 +196,7 @@
 		BED7DAF338555164F980FDE9 /* FileOrderedCollectionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A92826CC55F5EE91B72934 /* FileOrderedCollectionPersistence.swift */; };
 		BF200F41FA7A88C525623215 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E425761E05D459199869361A /* AboutView.swift */; };
 		BF3E65570A0501F384F8C0BA /* ReaderStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 475452DA26606C9EEF2982D2 /* ReaderStateView.swift */; };
+		BFA04D8FDA16789D91F28C53 /* OpenCoreAMR.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D983CC8909E412F202FEC3F5 /* OpenCoreAMR.xcframework */; };
 		C02D20CEC3FEDED464983D96 /* SafariActionPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872607E2663432D3116C5BB6 /* SafariActionPayload.swift */; };
 		C0504704A144B25F4915E062 /* SavedThreadMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBF9E6133FA9F395134196F /* SavedThreadMedia.swift */; };
 		C093E45405F12EC29B1F62B5 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB22109F3B9CFD8850C4BEE0 /* AuthSession.swift */; };
@@ -317,11 +321,13 @@
 		06BFF7EDD31716056CE12B69 /* TiebaAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TiebaAPI.swift; sourceTree = "<group>"; };
 		07566334FE43A9F9BF360D89 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
 		07C158046155BBD6748519CF /* TiebaContentSubmissionAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TiebaContentSubmissionAPI.swift; sourceTree = "<group>"; };
+		07CCB58C3C7C199C205692DA /* PrivateAMRDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateAMRDecoder.swift; sourceTree = "<group>"; };
 		08646B7853C7ECAB171844D9 /* RootTabScrollObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabScrollObserver.swift; sourceTree = "<group>"; };
 		08C0F8A37BD6F0E4EA09BFCD /* ContentComposerPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentComposerPolicyTests.swift; sourceTree = "<group>"; };
 		094A7B97C027D43346675B29 /* TiebaPureProfile_UserProfile.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TiebaPureProfile_UserProfile.pb.swift; sourceTree = "<group>"; };
 		094DB1CB5AD5C781A07443AB /* VideoDownloadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDownloadService.swift; sourceTree = "<group>"; };
 		0CE52F261111609A3D8E1D30 /* ContentDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftTests.swift; sourceTree = "<group>"; };
+		0D351BD61580A9A27704E700 /* OpenCoreAMR-Apache-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OpenCoreAMR-Apache-2.0.txt"; sourceTree = "<group>"; };
 		0DB03A9A81B77E7ECBD00B30 /* SavedThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedThread.swift; sourceTree = "<group>"; };
 		0DCF58C81949825A4BC0763B /* ComposerFocusUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerFocusUpdate.swift; sourceTree = "<group>"; };
 		0E50CC9DC6A0FEE9D095B963 /* PbPage_PbPageResponse.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PbPage_PbPageResponse.pb.swift; sourceTree = "<group>"; };
@@ -351,6 +357,7 @@
 		24D4BAC59CD64A3B8F236258 /* SearchHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchHistory.swift; sourceTree = "<group>"; };
 		25BD3F2D04164FFE41606F0C /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
 		25C06BE869912F233C314E5A /* ContentDraftPersistenceFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftPersistenceFactory.swift; sourceTree = "<group>"; };
+		260CD478C4A8B6DBD1135383 /* PrivateAMRDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateAMRDecoderTests.swift; sourceTree = "<group>"; };
 		273C5E55B0D298678C72F894 /* VoicePlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePlaybackTests.swift; sourceTree = "<group>"; };
 		2758D17C77814946EB5560DA /* MultipartFormDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultipartFormDataTests.swift; sourceTree = "<group>"; };
 		277C554E042BEC92DDCC065C /* MediaGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGridView.swift; sourceTree = "<group>"; };
@@ -533,6 +540,7 @@
 		D671D758CEF85777E7C7D8E4 /* MeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeView.swift; sourceTree = "<group>"; };
 		D675F69938E6B1281FC28A54 /* ContentDraftPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftPersistence.swift; sourceTree = "<group>"; };
 		D748C5A77D226EAD9A7EEB85 /* ThreadPageMainPostPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadPageMainPostPolicyTests.swift; sourceTree = "<group>"; };
+		D983CC8909E412F202FEC3F5 /* OpenCoreAMR.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = OpenCoreAMR.xcframework; path = Vendor/OpenCoreAMR.xcframework; sourceTree = "<group>"; };
 		D9DDCEE2EB7CAB5604D83C90 /* SubPostList.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubPostList.pb.swift; sourceTree = "<group>"; };
 		DB22109F3B9CFD8850C4BEE0 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		DBA0A4653556BD11ACA8C0A3 /* AnonymousLiveSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnonymousLiveSmokeTests.swift; sourceTree = "<group>"; };
@@ -576,6 +584,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BFA04D8FDA16789D91F28C53 /* OpenCoreAMR.xcframework in Frameworks */,
 				ED3E9E7D0D3A425FBB4B9C05 /* SwiftProtobuf in Frameworks */,
 				221CEAF5C48D697203C0FC6B /* SwiftData.framework in Frameworks */,
 			);
@@ -898,6 +907,7 @@
 				BA707FB3466F64C9B7BB74F3 /* NavigationSourceLifecycleTests.swift */,
 				481EB2A4D9C019B333364901 /* PersistenceBoundaryTests.swift */,
 				45B1DFDD03C10D34B491546B /* PostTimestampFormattingTests.swift */,
+				260CD478C4A8B6DBD1135383 /* PrivateAMRDecoderTests.swift */,
 				FFCAF2793D4421ABE58E87D5 /* PrivateMediaUploadTests.swift */,
 				171D63FC5CB19ED1C1B901E0 /* PrivateMessagePolicyTests.swift */,
 				67BA17E81BC9F2D19F7D5EEC /* PrivateVoiceUploadTests.swift */,
@@ -937,6 +947,7 @@
 		90373AEC4E0A9E0041EBF5FE /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				D983CC8909E412F202FEC3F5 /* OpenCoreAMR.xcframework */,
 				158DD0B24F8C6500639DB687 /* SwiftData.framework */,
 			);
 			name = Frameworks;
@@ -996,6 +1007,7 @@
 		AB9E9D176FD1AA5559CA10B9 /* LICENSES */ = {
 			isa = PBXGroup;
 			children = (
+				0D351BD61580A9A27704E700 /* OpenCoreAMR-Apache-2.0.txt */,
 				B6698EB80DB6FC3196AA8060 /* SwiftProtobuf-Apache-2.0.txt */,
 			);
 			path = LICENSES;
@@ -1015,6 +1027,7 @@
 		AF9CB51DE2DE586FC3F27182 /* Voice */ = {
 			isa = PBXGroup;
 			children = (
+				07CCB58C3C7C199C205692DA /* PrivateAMRDecoder.swift */,
 				E442EEBED99D57F019D339D0 /* VoiceAudioClient.swift */,
 				398BABD44302879D665A9AC3 /* VoicePlaybackControl.swift */,
 				8C21E4C8027927C8D821B1B6 /* VoicePlaybackCoordinator.swift */,
@@ -1304,6 +1317,7 @@
 			files = (
 				523FCD7E0AC8E40A81BA0C03 /* Assets.xcassets in Resources */,
 				EFE9BC6B72BEA4E2F99D069D /* LICENSE in Resources */,
+				5CE1647F778B9C537242EC00 /* OpenCoreAMR-Apache-2.0.txt in Resources */,
 				35DB68280B2FAF0F4C1493B9 /* PrivacyInfo.xcprivacy in Resources */,
 				D650566AC4F83CB216678D7B /* SwiftProtobuf-Apache-2.0.txt in Resources */,
 				6EBC6B5C1740789C34F6FDF2 /* tieba-emoticons in Resources */,
@@ -1422,6 +1436,7 @@
 				DB3881EB1B055DE5583FBE65 /* Post.swift in Sources */,
 				2C654A00A0C56273D59EB465 /* PostMapper.swift in Sources */,
 				5B4467804B2B693EBB8D89D6 /* PostRowView.swift in Sources */,
+				B74D36C1CE395E4FFC5C3D76 /* PrivateAMRDecoder.swift in Sources */,
 				604E8FC41DC5F3C3B9781376 /* PrivateMessageClient.swift in Sources */,
 				5D3A1C3A24FCE9EBC49980BB /* PrivateMessageMediaUpload.swift in Sources */,
 				EC02FBB685ED498FEF8FBB67 /* PrivateMessagesView.swift in Sources */,
@@ -1541,6 +1556,7 @@
 				BE37D589510658CE415782CD /* NavigationSourceLifecycleTests.swift in Sources */,
 				9C4E81261CE11986A7FC94CA /* PersistenceBoundaryTests.swift in Sources */,
 				5B8609115FEFF1115258243B /* PostTimestampFormattingTests.swift in Sources */,
+				0008379A2FC3B5ADF0055850 /* PrivateAMRDecoderTests.swift in Sources */,
 				2B1CA6E27390F86348BB8099 /* PrivateMediaUploadTests.swift in Sources */,
 				4FD991EF4248A92D2E49EC4F /* PrivateMessagePolicyTests.swift in Sources */,
 				FBE2DB6192A1FE321DF120D4 /* PrivateVoiceUploadTests.swift in Sources */,
@@ -1671,6 +1687,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = TiebaPureIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = "$(APP_BUILD)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor\"",
+				);
 				INFOPLIST_FILE = TiebaPure/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1761,6 +1781,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = TiebaPureIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = "$(APP_BUILD)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor\"",
+				);
 				INFOPLIST_FILE = TiebaPure/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

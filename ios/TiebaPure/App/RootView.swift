@@ -292,6 +292,7 @@ private struct ExternalRouteView: View {
 
 private struct MainTabView: View {
     @EnvironmentObject private var environment: AppEnvironment
+    @EnvironmentObject private var appearance: AppAppearanceStore
     let account: Account?
     @State private var nativeTabBarState = NativeRootTabBarState()
     @State private var selectedTab: RootTab = .home
@@ -323,16 +324,22 @@ private struct MainTabView: View {
     @available(iOS 18.0, *)
     private var modernTabView: some View {
         TabView(selection: tabSelection) {
-            Tab("首页", systemImage: "house", value: RootTab.home) {
+            Tab(value: RootTab.home) {
                 HomeView(account: account, refreshToken: homeRefreshToken)
+            } label: {
+                NativeRootTabLabel(title: "首页", symbol: "house", showsLabels: appearance.bottomBarShowsLabels)
             }
 
-            Tab("进吧", systemImage: "square.grid.2x2", value: RootTab.forums) {
+            Tab(value: RootTab.forums) {
                 ForumHubView(account: account)
+            } label: {
+                NativeRootTabLabel(title: "进吧", symbol: "square.grid.2x2", showsLabels: appearance.bottomBarShowsLabels)
             }
 
-            Tab("我的", systemImage: "person.circle", value: RootTab.me) {
+            Tab(value: RootTab.me) {
                 MeView(account: account, unread: environment.messageUnread)
+            } label: {
+                NativeRootTabLabel(title: "我的", symbol: "person.circle", showsLabels: appearance.bottomBarShowsLabels)
             }
         }
     }

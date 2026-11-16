@@ -70,6 +70,14 @@ final class PrivateMessagePolicyTests: XCTestCase {
         XCTAssertNil(VoiceAudioURLPolicy.url(forMD5: id + "&a=1"))
     }
 
+    func testPrivateVoiceFractionalDuration() {
+        XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":"2.646125"}]"#), 3)
+        XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":"3.505625"}]"#), 4)
+        XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":2.419}]"#), 3)
+        XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":"NaN"}]"#), 0)
+        XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":"999999999999999999"}]"#), 600)
+    }
+
     func testImageUploadGroupComesFromTheAuthenticatedInboxAndIsCached() async throws {
         let client = PrivateMessageClient(directory: nil)
         let account = Account(uid: "84", name: "fixture", displayName: "fixture", portrait: "", bduss: "fixture-bduss", stoken: "fixture-stoken", tbs: "fixture-tbs")

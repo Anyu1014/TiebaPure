@@ -38,9 +38,8 @@ internal object PrivateMessageContent {
     }
     fun voiceMD5(content: String): String? = body(content)?.optString("voice_md5")?.let(::voiceID)
     fun duration(content: String): Int = body(content)?.optInt("during_time", 0)?.coerceIn(0, 600) ?: 0
-    fun validate(content: String, type: Int) {
-        require(content.isNotBlank() && content.length <= if (type == 1) 5000 else 65536) { "私信内容无效或过长" }
-        require(type == 1 || type == 2 && imageURL(content) != null || type == 3 && voiceMD5(content) != null && (body(content)?.optInt("during_time", 0) ?: 0) in 1..600) { "私信附件无效，请重新选择" }
+    fun validate(content: String) {
+        require(content.isNotBlank() && content.length <= 5000) { "私信内容无效或过长" }
     }
     fun message(message: dev.anyu.tiebapure.official.OfficialIM.ChatMessage, read: Boolean = false): PrivateChatMessage = PrivateChatMessage(
         message.id.toString(), message.fromUid.toString(), OfficialPrivateInbox.text(message), message.timestamp.toLong(), message.type,

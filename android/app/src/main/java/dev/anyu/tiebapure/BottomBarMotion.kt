@@ -1,5 +1,6 @@
 package dev.anyu.tiebapure
 
+import android.content.SharedPreferences
 import kotlin.math.abs
 
 class BottomBarTransition(progress: Float) {
@@ -15,6 +16,13 @@ class BottomBarTransition(progress: Float) {
 enum class BottomBarPosition(val key: String, val title: String, val fraction: Float) {
     LEFT("left", "居左", -1f), CENTER("center", "居中", 0f), RIGHT("right", "居右", 1f);
     companion object { fun stored(value: String?) = entries.firstOrNull { it.key == value } ?: LEFT }
+}
+
+internal fun loadReplyBarPosition(prefs: SharedPreferences, previous: BottomBarPosition): BottomBarPosition {
+    val saved = prefs.getString("reply-bar-position", null)
+    val position = BottomBarPosition.stored(saved ?: previous.key)
+    if (saved == null) prefs.edit().putString("reply-bar-position", position.key).apply()
+    return position
 }
 
 class BottomBarMotion {

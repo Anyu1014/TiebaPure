@@ -61,12 +61,40 @@ enum BottomBarScenarios {
         try require(AppAppearanceStore(defaults: defaults, key: key).bottomBarPosition == .left, "unknown positions fall back safely")
         try require(BottomBarPosition.allCases.map(\.fraction) == [-1, 0, 1], "position order is left center right")
     }
+    static func replyPreferences() throws {
+        let suite = "reply-bar-test-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "appearance"
+        defaults.set("right", forKey: key + ".tab-position")
+        let store = AppAppearanceStore(defaults: defaults, key: key)
+        try require(store.replyBarPosition == .right, "migration keeps the existing reply position")
+        store.setBottomBarPosition(.left)
+        try require(store.replyBarPosition == .right, "navigation changes do not move replies")
+        store.setReplyBarPosition(.center)
+        try require(store.bottomBarPosition == .left, "reply changes do not move navigation")
+        let reloaded = AppAppearanceStore(defaults: defaults, key: key)
+        try require(reloaded.replyBarPosition == .center && reloaded.bottomBarPosition == .left, "both positions persist independently")
+        reloaded.reset()
+        try require(reloaded.replyBarPosition == .left && reloaded.bottomBarPosition == .left, "reset restores both positions")
+    }
+    static func replyGeometry() throws {
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 700, containerBottom: 770) == 8, "reply aligns with native avatar")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 700, containerBottom: 746) == -16, "reply can align below the safe-area bottom")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 700, containerBottom: 746, editing: true) == 8, "editing keeps the original keyboard inset")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 690, containerBottom: 770) == 18, "reply follows native vertical frame")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: nil, containerBottom: 770) == 8, "legacy fallback uses eight points")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 700, containerBottom: 400) == 8, "keyboard keeps its normal inset")
+        try require(ReplyBarGeometry.bottomPadding(referenceTop: 500, containerBottom: 770) == 8, "stale frame is ignored")
+    }
 }
 #if canImport(UIKit)
 final class BottomBarMotionTests: XCTestCase {
     @MainActor func testContinuousContentHandoffAndClampedEndpoints() throws { try BottomBarScenarios.transition() }
     @MainActor func testScrollDirectionSpeedAndManualExpansion() throws { try BottomBarScenarios.motion() }
     @MainActor func testPositionAndLabelPreferencesPersistence() throws { try BottomBarScenarios.preferences() }
+    @MainActor func testReplyPositionPersistsIndependently() throws { try BottomBarScenarios.replyPreferences() }
+    @MainActor func testReplyVerticalGeometryMatchesNavigation() throws { try BottomBarScenarios.replyGeometry() }
 
     @MainActor func testExpandedNativeBarRecoversFromTransientUIKitVisibility() {
         let bar = UITabBar()
@@ -86,7 +114,7 @@ final class BottomBarMotionTests: XCTestCase {
     }
 
     @available(iOS 26.0, *)
-    @MainActor func testIconOnlyArtworkIsSharedByBothNativeStatesAndRestoresLabels() throws {
+    @MainActor func testTitleVisibilityPreservesSourceOwnedArtwork() throws {
         let entries = [("首页", "house"), ("进吧", "square.grid.2x2"), ("我的", "person.circle")]
         let tabs = entries.map { title, symbol in
             UITab(title: title, image: UIImage(systemName: symbol), identifier: symbol) { _ in UIViewController() }
@@ -107,12 +135,7 @@ final class BottomBarMotionTests: XCTestCase {
             XCTAssertEqual(bar.frame, originalFrame)
             let items = try XCTUnwrap(bar.items)
             XCTAssertEqual(items.map(\.accessibilityLabel), entries.map { $0.0 })
-            for (item, nativeTab) in zip(items, tabs) {
-                let image = try XCTUnwrap(item.image)
-                XCTAssertFalse(image.isSymbolImage)
-                XCTAssertEqual(item.selectedImage?.pngData(), image.pngData())
-                XCTAssertEqual(nativeTab.image?.pngData(), image.pngData())
-            }
+            XCTAssertEqual(tabs.map(\.image), originalArtwork)
         }
         state.apply(collapsed: false, showsLabels: true)
         XCTAssertEqual(bar.items?.map(\.title), entries.map { $0.0 })

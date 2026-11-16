@@ -28,12 +28,16 @@ targets:
         buildPhase: resources
       - path: LICENSES/SwiftProtobuf-Apache-2.0.txt
         buildPhase: resources
+      - path: LICENSES/OpenCoreAMR-Apache-2.0.txt
+        buildPhase: resources
     resources:
       - TiebaPure/Resources/Assets.xcassets
       - TiebaPure/Resources/PrivacyInfo.xcprivacy
     dependencies:
       - target: TiebaPureOpenIn
         embed: true
+      - framework: Vendor/OpenCoreAMR.xcframework
+        embed: false
       - package: SwiftProtobuf
       - sdk: SwiftData.framework
         weak: true

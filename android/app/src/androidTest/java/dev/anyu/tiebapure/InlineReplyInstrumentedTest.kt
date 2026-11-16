@@ -58,7 +58,7 @@ class InlineReplyInstrumentedTest {
                         MaterialTheme {
                             Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                                 Box(Modifier.requiredSize(320.dp, 94.dp)) {
-                                    FloatingReplyReader(vm, PaddingValues(bottom = 16.dp), true, target.value) {
+                                    FloatingReplyReader(vm, true, target.value) {
                                         Box(it)
                                     }
                                 }

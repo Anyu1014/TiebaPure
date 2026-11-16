@@ -51,20 +51,6 @@ class PrivateMessageNetworkTest {
         return api
     }
     private val account = Account("84","fixture","fixture-bduss","fixture-stoken","fixture-tbs")
-    @Test fun officialMediaSendKeepsTheTypeAndCachesTheRenderableContent() = runBlocking {
-        val fixture = JSONObject(java.io.File("../../protocol-fixtures/private-messages.json").readText()).getJSONObject("official_content")
-        val api = TiebaApi("fixture"); val peer = PrivateConversation("42", "42")
-        for ((type, key) in listOf(2 to "image_content", 3 to "voice_content")) {
-            val content = fixture.getString(key)
-            api.officialSend = { _, request ->
-                assertEquals(type, request.data.msgType); assertEquals(content, request.data.content)
-                IM.CommitResponse.newBuilder().setError(IM.IMError.newBuilder().setCode(0)).setData(IM.CommitResult.newBuilder().setId(type.toLong()).setToUid(42).setRecordId(request.data.recordId)).build()
-            }
-            api.sendPrivateMessage(account, peer, content, "fixture", type)
-            val cached = api.privateMessages(account, peer, Long.MAX_VALUE).items.first { it.type == type }
-            if (type == 2) assertNotNull(cached.mediaURL) else { assertNotNull(cached.voiceMD5); assertEquals(4, cached.duration) }
-        }
-    }
     @Test fun officialSendUsesActualUidPlainTextTypeAndMatchingReceiptWithoutRetry() = runBlocking {
         val api = TiebaApi("fixture"); var attempts = 0
         api.officialSend = { _, request ->

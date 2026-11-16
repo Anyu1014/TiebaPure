@@ -38,9 +38,12 @@ final class PrivateVoiceUploadTests: XCTestCase {
         XCTAssertEqual(requests.map { $0.url?.path }, ["/c/c/voice/chunkupload", "/c/c/voice/chunkupload", "/c/c/voice/voice_fin_chunk_upload"])
         XCTAssertTrue(requests.allSatisfy { $0.url?.scheme == "https" && $0.url?.host == "tiebac.baidu.com" })
         XCTAssertTrue(requests.allSatisfy {
-            $0.value(forHTTPHeaderField: "Cookie") == "CUID=fixture; ka=open; BDUSS=fixture-bduss; stoken=fixture-stoken"
+            $0.value(forHTTPHeaderField: "Cookie") == "CUID=fixture; ka=open; BDUSS=fixture-bduss; STOKEN=fixture-stoken"
         })
+        XCTAssertTrue(requests.allSatisfy { $0.value(forHTTPHeaderField: "User-Agent") == "tieba/12.35.1.0 skin/default" })
         let bodies = requests.map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+        XCTAssertTrue(bodies[0].contains("name=\"_client_version\"\r\n\r\n12.35.1.0\r\n"))
+        XCTAssertTrue(bodies[0].contains("name=\"BDUSS\"\r\n\r\nfixture-bduss\r\n"))
         XCTAssertTrue(bodies[0].contains("name=\"offset\"\r\n\r\n0\r\n"))
         XCTAssertTrue(bodies[1].contains("name=\"offset\"\r\n\r\n30720\r\n"))
         XCTAssertTrue(bodies[1].contains("name=\"length\"\r\n\r\n280\r\n"))

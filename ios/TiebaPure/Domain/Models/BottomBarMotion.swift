@@ -18,6 +18,14 @@ enum BottomBarPosition: String, CaseIterable, Identifiable, Sendable {
     var fraction: Double { switch self { case .left: return -1; case .center: return 0; case .right: return 1 } }
 }
 
+enum ReplyBarGeometry {
+    static func bottomPadding(referenceTop: CGFloat?, containerBottom: CGFloat, editing: Bool = false) -> CGFloat {
+        guard let referenceTop, referenceTop.isFinite, containerBottom.isFinite else { return 8 }
+        let padding = containerBottom - (referenceTop + 62)
+        return (editing ? (0...64) : (-64...64)).contains(padding) ? padding : 8
+    }
+}
+
 final class BottomBarMotion {
     private(set) var collapsed = false
     private var direction = 0

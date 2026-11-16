@@ -2,6 +2,25 @@ import XCTest
 @testable import TiebaPure
 
 final class PrivateMediaUploadTests: XCTestCase {
+    @MainActor func testUploadUsesPostingIdentityInsteadOfPrivateSessionID() {
+        let account = Account(uid: "84", name: "fixture", displayName: "fixture", portrait: "", bduss: "fixture-bduss", stoken: "fixture-stoken", tbs: "fixture-tbs")
+        let identity = TiebaPostingIdentity(androidID: "fixture-android", uuid: "fixture-uuid", cuidGalaxy2: "registered-cuid", c3AID: "registered-c3")
+        let bootstrap = TiebaPostingBootstrapResult(identity: identity, clientID: "registered-client", sampleID: "registered-sample", zID: "registered-z")
+        let context = PrivateMessageMediaUpload.requestContext(account: account, clientID: "lcs-session", bootstrap: bootstrap)
+        XCTAssertEqual(context.fields["_client_id"], "registered-client")
+        XCTAssertEqual(context.fields["cuid"], "registered-cuid")
+        XCTAssertEqual(context.fields["c3_aid"], "registered-c3")
+        XCTAssertEqual(context.fields["sample_id"], "registered-sample")
+        XCTAssertEqual(context.fields["z_id"], "registered-z")
+        XCTAssertEqual(context.headers["cuid"], "registered-cuid")
+        XCTAssertEqual(context.fields["BDUSS"], "fixture-bduss")
+    }
+
+    func testDiagnosticMessageFlagsDoNotExposeResponseText() {
+        XCTAssertEqual(PrivateMessageMediaUpload.diagnosticMessageFlags("签名错误 secret-123"), "signature,invalid")
+        XCTAssertEqual(PrivateMessageMediaUpload.diagnosticMessageFlags("账号未登录 token=secret"), "authentication")
+        XCTAssertEqual(PrivateMessageMediaUpload.diagnosticMessageFlags("random private information"), "other")
+    }
     func testImageUploadUsesSignedMultipartAndAValidatedReceipt() async throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PrivateImageURLProtocol.self]
@@ -45,9 +64,16 @@ private final class PrivateImageURLProtocol: URLProtocol {
             }
         }
         let text = String(decoding: body, as: UTF8.self)
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "CUID=fixture; ka=open; BDUSS=fixture-bduss; stoken=fixture-stoken")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "ka=open")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "tieba/12.35.1.0 skin/default")
+        XCTAssertTrue(text.contains("name=\"_client_version\"\r\n\r\n12.35.1.0\r\n"))
+        XCTAssertTrue(text.contains("name=\"BDUSS\"\r\n\r\nfixture-bduss\r\n"))
         XCTAssertTrue(text.contains("name=\"resourceId\"\r\n\r\nE44E7ECFEC99356632C13CD3EAA3E250512000\r\n"))
         XCTAssertTrue(text.contains("name=\"support_image\"\r\n\r\njepgwebp\r\n"))
+        XCTAssertTrue(text.contains("name=\"stoken\"\r\n\r\nfixture-stoken\r\n"))
+        XCTAssertTrue(text.contains("name=\"scr_w\""))
+        XCTAssertTrue(text.contains("name=\"scr_h\""))
+        XCTAssertTrue(text.contains("name=\"scr_dip\""))
         XCTAssertTrue(text.contains("name=\"sign\""))
         XCTAssertTrue(text.contains("name=\"chunkNo\"\r\n\r\n1\r\n"))
         XCTAssertTrue(text.contains("name=\"isFinish\"\r\n\r\n1\r\n"))

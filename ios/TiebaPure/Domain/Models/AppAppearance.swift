@@ -47,6 +47,7 @@ final class AppAppearanceStore: ObservableObject {
 
     @Published private(set) var selection: AppAppearance
     @Published private(set) var bottomBarPosition: BottomBarPosition
+    @Published private(set) var replyBarPosition: BottomBarPosition
     @Published private(set) var bottomBarShowsLabels: Bool
     @Published private(set) var bottomBarAutoCollapse: Bool
 
@@ -59,7 +60,10 @@ final class AppAppearanceStore: ObservableObject {
     ) {
         self.defaults = defaults
         self.key = key
-        bottomBarPosition = BottomBarPosition(rawValue: defaults.string(forKey: key + ".tab-position") ?? "") ?? .left
+        let initialPosition = BottomBarPosition(rawValue: defaults.string(forKey: key + ".tab-position") ?? "") ?? .left
+        bottomBarPosition = initialPosition
+        let initialReplyPosition = BottomBarPosition(rawValue: defaults.string(forKey: key + ".reply-position") ?? initialPosition.rawValue) ?? .left
+        replyBarPosition = initialReplyPosition
         bottomBarShowsLabels = defaults.object(forKey: key + ".tab-labels") as? Bool ?? true
         bottomBarAutoCollapse = defaults.object(forKey: key + ".tab-auto-collapse") as? Bool ?? true
 
@@ -71,6 +75,9 @@ final class AppAppearanceStore: ObservableObject {
             if defaults.object(forKey: key) != nil {
                 defaults.removeObject(forKey: key)
             }
+        }
+        if defaults.object(forKey: key + ".reply-position") == nil {
+            defaults.set(initialReplyPosition.rawValue, forKey: key + ".reply-position")
         }
     }
 
@@ -88,6 +95,9 @@ final class AppAppearanceStore: ObservableObject {
     func setBottomBarPosition(_ position: BottomBarPosition) {
         defaults.set(position.rawValue, forKey: key + ".tab-position"); bottomBarPosition = position
     }
+    func setReplyBarPosition(_ position: BottomBarPosition) {
+        defaults.set(position.rawValue, forKey: key + ".reply-position"); replyBarPosition = position
+    }
     func setBottomBarShowsLabels(_ shows: Bool) {
         defaults.set(shows, forKey: key + ".tab-labels"); bottomBarShowsLabels = shows
     }
@@ -98,8 +108,10 @@ final class AppAppearanceStore: ObservableObject {
         defaults.removeObject(forKey: key)
         defaults.removeObject(forKey: key + ".tab-position"); defaults.removeObject(forKey: key + ".tab-labels")
         defaults.removeObject(forKey: key + ".tab-auto-collapse")
+        defaults.removeObject(forKey: key + ".reply-position")
         selection = .system
         bottomBarPosition = .left; bottomBarShowsLabels = true
+        replyBarPosition = .left
         bottomBarAutoCollapse = true
     }
 
