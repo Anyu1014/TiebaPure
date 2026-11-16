@@ -25,6 +25,7 @@ struct PrivateMessagesView: View {
     @State private var action: Task<Void, Never>?
     @State private var active = true
     @State private var showsEmoticons = false
+    @State private var mediaAspects: [String: CGFloat] = [:]
 
     init(account: Account, recipient: UserSummary? = nil, onUnreadChange: @escaping (Bool) -> Void = { _ in }) {
         self.account = account
@@ -143,8 +144,9 @@ struct PrivateMessagesView: View {
                         if messages.isEmpty && !loading && error == nil { Text("暂无消息").foregroundStyle(.secondary).padding(24) }
                         ForEach(messages) { message in
                             let mine = message.senderID == account.uid
-                            HStack {
-                                if mine { Spacer(minLength: 48) }
+                            let edgeGap: CGFloat = showsBubbleChrome(message) ? 48 : 0
+                            HStack(spacing: 0) {
+                                if mine { Spacer(minLength: edgeGap) }
                                 VStack(alignment: mine ? .trailing : .leading, spacing: 5) {
                                     HStack(alignment: .bottom, spacing: 6) {
                                         if mine && message.read { Text("已读").font(.caption2).foregroundStyle(.secondary) }
@@ -152,7 +154,7 @@ struct PrivateMessagesView: View {
                                     }
                                     if message.timestamp > 0 { Text(Date(timeIntervalSince1970: Double(message.timestamp)), format: .dateTime.month().day().hour().minute()).font(.caption2).foregroundStyle(.secondary) }
                                 }
-                                if !mine { Spacer(minLength: 48) }
+                                if !mine { Spacer(minLength: edgeGap) }
                             }.id(message.id)
                         }
                     }.padding()
@@ -200,13 +202,33 @@ struct PrivateMessagesView: View {
         if message.voiceMD5 != nil { return false }
         return true
     }
+    private func mediaSize(_ aspect: CGFloat?) -> CGSize {
+        guard let aspect, aspect > 0, aspect.isFinite else { return CGSize(width: 220, height: 220) }
+        let maximumWidth: CGFloat = 220, maximumHeight: CGFloat = 280
+        var width = maximumWidth
+        var height = maximumWidth / aspect
+        if height > maximumHeight { height = maximumHeight; width = height * aspect }
+        return CGSize(width: width, height: height)
+    }
     @ViewBuilder private func messageBody(_ message: PrivateChatMessage) -> some View {
         if message.type == 2, let url = message.mediaURL {
+            let key = url.absoluteString
+            let size = mediaSize(mediaAspects[key])
             Button {
                 let image = ImageContent(thumbnailURL: url, originalURL: url, width: 0, height: 0, showOriginalButton: false)
                 ImagePreviewCoordinator.shared.present(ImagePreviewSession(images: [image], initialIndex: 0))
             } label: {
-                TiebaRemoteImage(primaryURL: url, targetPixelSize: 660, contentMode: .fit, showsProgress: true).frame(width: 220, height: 220)
+                TiebaRemoteImage(
+                    primaryURL: url,
+                    targetPixelSize: 660,
+                    contentMode: .fit,
+                    showsProgress: true,
+                    onImageResolved: { image in
+                        guard image.size.height > 0 else { return }
+                        let aspect = image.size.width / image.size.height
+                        Task { @MainActor in if mediaAspects[key] != aspect { mediaAspects[key] = aspect } }
+                    }
+                ).frame(width: size.width, height: size.height)
             }.accessibilityLabel("查看私信图片")
         } else if let md5 = message.voiceMD5, let voice = VoiceContent(md5: md5, durationMilliseconds: message.duration * 1_000) {
             VoicePlaybackControl(voice: voice)

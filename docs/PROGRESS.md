@@ -1,5 +1,10 @@
 # 当前进展
 
+## 2026-11-16 iOS 私信媒体消息贴边对齐（本地源码）
+
+- `PrivateMessagesView.swift`：新增 `@State mediaAspects: [String: CGFloat]` 与 `mediaSize(_:)`，图片用 `TiebaRemoteImage` 的 `onImageResolved` 回调取到真实宽高比后按 `220×280` 上限计算实际尺寸，取代原来固定 `frame(width: 220, height: 220)` 造成的左右留黑；行内 `edgeGap` 对文本仍为 48、对图片与语音为 0，因此对方图片贴左、我方图片贴右，只保留列表 16pt 外边距。
+- 验证：`xcodebuild ... generic/platform=iOS Simulator build` → BUILD SUCCEEDED；`signed-archive` → ARCHIVE SUCCEEDED；`export` → EXPORT SUCCEEDED，产物 sha `9105b46ceb206cc2f2bd4aaad7c7a018b57bc7753c7cbc4e3e9af0a50b381b00`。
+
 ## 2026-11-16 iOS 私信图片与语音取消气泡底色（本地源码）
 
 - `ios/TiebaPure/Features/Messages/PrivateMessagesView.swift` 新增 `bubbleBody(_:mine:)` 与 `showsBubbleChrome(_:)`：文本仍走 `messageBody().padding(12).background(blue 12% / secondary 8%, cornerRadius: 14)`；`type == 2` 且有 `mediaURL` 的图片消息、以及 `voiceMD5 != nil` 的语音消息不再套气泡与 12pt 内边距，直接渲染图片或 `VoicePlaybackControl`（后者自带 `readerSecondarySurface` 底色与 8pt 圆角）。
