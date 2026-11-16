@@ -1,5 +1,25 @@
 # 当前进展
 
+## 2026-11-16 Android 私信气泡与输入区对齐 iOS 设计（本地源码）
+
+- 气泡：背景改成 iOS 同款半透明底色（自己 `primary` 12%，对方 `onSurface` 8%），统一 14dp 圆角（原先 Android 用 primaryContainer/surfaceContainer 加不对称尾角），去掉了 Material3 的 tonal 抬升。
+- 语音气泡：换成 `VoicePlaybackControl` 的排布——17dp 播放/暂停图标 + “语音/播放中” + 等宽数字时长（m:ss），最小 152dp、最大 280dp、最小高 44dp、8dp 圆角、surfaceContainerHigh 底色，内边距 12×4，对应 iOS 的 minWidth 152 / maxWidth 280 / minHeight 44 / Radius.media。
+- 输入区：`OutlinedTextField` 换成无边框填充输入（surfaceContainerHigh、20dp 圆角、12×10 内边距、最小高 44dp），外层内边距改为 16×8，与 iOS `tertiarySystemFill` + 20 圆角一致。
+- 表情按钮：Material `Icons.Filled.Face` 换成自绘笑脸（1.6dp 描边圆 + 两点眼睛 + 130° 弧嘴），贴近 SF Symbols `face.smiling` 的线性风格；按钮 44×44，图标 22dp。
+- 验证：`assembleRelease` 通过；用临时反射探针（已删除）在模拟器截到会话页，确认输入框、笑脸、发送键的样式；release 同签名覆盖安装到 emulator-5580，冷启动 2235ms。
+
+## 2026-11-16 私信语音改为就地播放（本地源码）
+
+私信语音气泡不再弹窗：点按后在同一屏内用 ExoPlayer 播放，按钮文案在“▶ 语音 N 秒”和“⏸ 语音 N 秒”之间切换，再次点按暂停；离开会话或应用退到后台时暂停并在销毁时释放播放器。播放器以 `androidx.media3.exoplayer.ExoPlayer` 直接播放 `tiebac.baidu.com/c/p/voice` 链接，不再经过 `MediaPlayer` 弹窗组件（该组件仍用于帖子内的语音/视频预览）。
+
+验证：`testDebugUnitTest assembleRelease` 通过；release 签名包以 `adb install -r` 覆盖安装到 emulator-5580（同签名升级，数据保留）并启动，冷启动 1807ms。模拟器内无登录账号与语音私信，点播行为未做真机/模拟器实测。
+
+## 2026-11-16 iOS 私信移除图片与语音发送（本地源码）
+
+与 Android 对齐，删除 iOS 私信的图片选择与录音/语音发送：`PrivateMessagesView` 去掉 PhotosPicker、录音器与附件预览，输入区为单行（输入框、表情、发送），`PrivateMessageClient.send` 去掉 `type` 参数、固定 `msgType = 1`，`PrivateMessageContent.validate` 只保留文本规则（非空、≤5000 字符、≤20000 字节）。删除 `PrivateVoiceRecorder.swift`、`PrivateVoiceUpload.swift`、`PrivateMessageMediaUpload.swift` 及 `PrivateVoiceUploadTests`、`PrivateMediaUploadTests`，`Info.plist` 移除 `NSMicrophoneUsageDescription`，`PrivateMessageClient.personalGroupID` 与 `VoicePlaybackCoordinator` 里写给媒体诊断缓存的调用一并删除；接收侧图片预览与语音播放保留。
+
+验证：`xcodegen generate` 重生成工程；`xcodebuild -scheme TiebaPure -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build` → BUILD SUCCEEDED，`build-for-testing` → TEST BUILD SUCCEEDED（测试目标编译通过）。本机 Xcode 27.0 未安装任何 iOS 模拟器 runtime（`xcrun simctl list runtimes` 为空），因此单测未执行、未打包。版本号仍为 2.4（89）。
+
 ## 2026-11-16 Android 私信移除图片与语音发送（本地源码）
 
 按当前源码删除 Android 私信的图片选择与录音/语音发送：会话输入区只保留文本、表情和发送按钮；上传接口、录音器、图片预处理类、对应单测与清单里的 RECORD_AUDIO 权限一并移除。收到消息的图片预览、语音播放与历史媒体展示保留。

@@ -62,8 +62,6 @@
 	<string>Copyright © 2026 infinityf4p</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>用于将您选择的贴吧原图保存到系统照片。</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>用于录制您选择发送的私信语音。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

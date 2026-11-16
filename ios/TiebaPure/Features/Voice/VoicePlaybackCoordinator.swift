@@ -504,25 +504,6 @@ final class VoicePlaybackCoordinator: ObservableObject {
 
     private func receiveFailure(_ error: Error, key: String, generation: UInt64) {
         guard isCurrent(key: key, generation: generation) else { return }
-        let diagnostic = error as NSError
-        let domain = [NSURLErrorDomain, NSOSStatusErrorDomain, NSCocoaErrorDomain].contains(diagnostic.domain) ? diagnostic.domain : "other"
-        let category: String
-        if let failure = error as? VoicePlaybackEngineError {
-            category = failure == .invalidAudioData ? "audio-decode" : "audio-start"
-        } else if let failure = error as? VoiceAudioClientError {
-            switch failure {
-            case .invalidMD5: category = "invalid-id"
-            case .invalidResponse: category = "invalid-response"
-            case .badStatus: category = "http-status"
-            case .invalidMIMEType: category = "mime-type"
-            case .emptyAudio: category = "empty-audio"
-            }
-        } else if error is TiebaHTTPError {
-            category = "network-response"
-        } else {
-            category = "other"
-        }
-        PrivateMessageMediaUpload.recordDiagnostic("播放", "error-category=\(category)\nerror-domain=\(domain)\nerror-code=\(diagnostic.code)")
         tearDownCurrentPlayback()
         state = .failed(
             key: key,

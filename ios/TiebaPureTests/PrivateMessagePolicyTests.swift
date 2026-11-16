@@ -78,22 +78,6 @@ final class PrivateMessagePolicyTests: XCTestCase {
         XCTAssertEqual(PrivateMessageContent.duration(#"[{"during_time":"999999999999999999"}]"#), 600)
     }
 
-    func testImageUploadGroupComesFromTheAuthenticatedInboxAndIsCached() async throws {
-        let client = PrivateMessageClient(directory: nil)
-        let account = Account(uid: "84", name: "fixture", displayName: "fixture", portrait: "", bduss: "fixture-bduss", stoken: "fixture-stoken", tbs: "fixture-tbs")
-        var pulls = 0
-        client.officialPull = { _, _ in
-            pulls += 1
-            var group = Tiebapure_Official_Group(); group.id = 600; group.type = 6
-            var response = Tiebapure_Official_PullResponse(); response.error.code = 0
-            return OfficialPrivateSnapshot(groups: [group], response: response)
-        }
-        let first = try await client.personalGroupID(account: account)
-        let cached = try await client.personalGroupID(account: account)
-        XCTAssertEqual(first, 600)
-        XCTAssertEqual(cached, 600)
-        XCTAssertEqual(pulls, 1)
-    }
     func testReadEventsAreMetadataAndOnlyMarkTheMatchingOutgoingMessages() throws {
         let inbox = try OfficialPrivateInbox(accountID: "84")
         let fixture = try XCTUnwrap(fixture()["official_content"] as? [String: String])
@@ -119,27 +103,9 @@ final class PrivateMessagePolicyTests: XCTestCase {
         let voice = #"[{"voice_md5":"0123456789abcdef0123456789abcdef","during_time":4,"has_read":0}]"#
         XCTAssertEqual(PrivateMessageContent.duration(voice), 4)
         XCTAssertEqual(PrivateMessageContent.voiceMD5(voice), "0123456789abcdef0123456789abcdef")
-        XCTAssertNoThrow(try PrivateMessageContent.validate(image, type: 2))
-        XCTAssertNoThrow(try PrivateMessageContent.validate(voice, type: 3))
-        XCTAssertThrowsError(try PrivateMessageContent.validate("[]", type: 2))
-    }
-    func testOfficialMediaSendKeepsTheTypeAndCachesRenderableContent() async throws {
-        let fixture = try XCTUnwrap(fixture()["official_content"] as? [String: String])
-        let client = PrivateMessageClient(directory: nil)
-        let account = Account(uid: "84", name: "fixture", displayName: "fixture", portrait: "", bduss: "fixture-bduss", stoken: "fixture-stoken", tbs: "fixture-tbs")
-        let peer = PrivateConversation(userID: "42", passUK: "42", userType: 0, name: "测试")
-        for (type, key) in [(2, "image_content"), (3, "voice_content")] {
-            let content = try XCTUnwrap(fixture[key])
-            client.officialSend = { _, request in
-                XCTAssertEqual(Int(request.data.msgType), type); XCTAssertEqual(request.data.content, content)
-                var response = Tiebapure_Official_CommitResponse(); response.error.code = 0; response.data.id = Int64(type); response.data.toUid = 42; response.data.recordID = request.data.recordID
-                return response
-            }
-            _ = try await client.send(content, to: peer, account: account, key: "fixture", type: type)
-            let page = try await client.messages(peer, account: account, before: Int64.max)
-            let cached = try XCTUnwrap(page.items.first { $0.type == type })
-            if type == 2 { XCTAssertNotNil(cached.mediaURL) } else { XCTAssertNotNil(cached.voiceMD5); XCTAssertEqual(cached.duration, 4) }
-        }
+        XCTAssertNoThrow(try PrivateMessageContent.validate("你好"))
+        XCTAssertThrowsError(try PrivateMessageContent.validate("   "))
+        XCTAssertThrowsError(try PrivateMessageContent.validate(String(repeating: "a", count: 5_001)))
     }
     private func fixture() throws -> [String: Any] {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "private-messages", withExtension: "json"))

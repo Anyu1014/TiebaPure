@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 
 struct PrivateMessagesView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -25,11 +24,7 @@ struct PrivateMessagesView: View {
     @State private var recipientError: String?
     @State private var action: Task<Void, Never>?
     @State private var active = true
-    @State private var photo: PhotosPickerItem?
-    @State private var image: ContentSubmissionImage?
-    @State private var preparing = false
     @State private var showsEmoticons = false
-    @StateObject private var recorder = PrivateVoiceRecorder()
 
     init(account: Account, recipient: UserSummary? = nil, onUnreadChange: @escaping (Bool) -> Void = { _ in }) {
         self.account = account
@@ -54,7 +49,7 @@ struct PrivateMessagesView: View {
                         .accessibilityIdentifier("private-mark-all-read")
                     Button { recipient = ""; recipientError = nil; newMessage = true } label: { Label("发消息", systemImage: "square.and.pencil") }
                 }
-                Button { revision += 1 } label: { Image(systemName: "arrow.clockwise").frame(minWidth: 44, minHeight: 44) }.disabled(loading || sending || preparing || recorder.recording || recorder.requestingPermission).accessibilityLabel("刷新私信")
+                Button { revision += 1 } label: { Image(systemName: "arrow.clockwise").frame(minWidth: 44, minHeight: 44) }.disabled(loading || sending).accessibilityLabel("刷新私信")
             }.font(.subheadline).padding(.horizontal)
             if let error { Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal).padding(.vertical, 8) }
             if let selected {
@@ -103,16 +98,13 @@ struct PrivateMessagesView: View {
         .task {
             while !Task.isCancelled {
                 do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
-                if active && scenePhase == .active && !loading && !sending && !preparing && !recorder.recording && !recorder.requestingPermission { revision += 1 }
+                if active && scenePhase == .active && !loading && !sending { revision += 1 }
             }
         }
         .onReceive(environment.accountStore.accountDidChange) { current in
-            if current?.sessionIdentity != account.sessionIdentity { active = false; generation += 1; action?.cancel(); draft = ""; image = nil; recorder.discard(); messages = []; conversations = [] }
+            if current?.sessionIdentity != account.sessionIdentity { active = false; generation += 1; action?.cancel(); draft = ""; messages = []; conversations = [] }
         }
-        .onDisappear { active = false; generation += 1; action?.cancel(); recorder.discard(); preparing = false; sending = false; loading = false }
-        .onChange(of: photo) { _ in preparePhoto() }
-        .onChange(of: recorder.error) { value in if let value { error = value } }
-        .onChange(of: scenePhase) { phase in if phase != .active { recorder.stop() } }
+        .onDisappear { active = false; generation += 1; action?.cancel(); sending = false; loading = false }
         .sheet(isPresented: $newMessage, onDismiss: { action?.cancel(); resolving = false }) {
             NavigationStack {
                 Form {
@@ -147,7 +139,7 @@ struct PrivateMessagesView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        if hasMore { Button("加载更早消息") { loadMore() }.disabled(loading || sending || preparing || recorder.recording || recorder.requestingPermission) }
+                        if hasMore { Button("加载更早消息") { loadMore() }.disabled(loading || sending) }
                         if messages.isEmpty && !loading && error == nil { Text("暂无消息").foregroundStyle(.secondary).padding(24) }
                         ForEach(messages) { message in
                             let mine = message.senderID == account.uid
@@ -168,44 +160,18 @@ struct PrivateMessagesView: View {
                 .onChange(of: messages.last?.id) { value in if let value, !loading { withAnimation { proxy.scrollTo(value, anchor: .bottom) } } }
             }
             VStack(spacing: 8) {
-                if preparing { ProgressView("正在准备图片") }
-                if let image {
-                    HStack {
-                        if let thumbnail = UIImage(data: image.data) { Image(uiImage: thumbnail).resizable().scaledToFit().frame(width: 56, height: 56) }
-                        Text("图片将单独发送").font(.caption)
-                        Spacer()
-                        Button("移除") { self.image = nil; photo = nil }.disabled(sending)
-                    }
-                }
-                if recorder.recording || recorder.attachment != nil {
-                    HStack {
-                        Text(recorder.recording ? "正在录音，最长60秒" : "语音 \(recorder.duration)秒").font(.caption)
-                        Spacer()
-                        Button("取消录音") { recorder.discard() }.disabled(sending)
-                    }
-                }
                 HStack(alignment: .center, spacing: 4) {
-                    Button {
-                        if recorder.recording { recorder.stop() }
-                        else {
-                            let currentGeneration = generation
-                            action = Task { @MainActor in
-                                do {
-                                    try await recorder.start()
-                                    guard active, generation == currentGeneration, scenePhase == .active else { recorder.discard(); return }
-                                } catch { if active { self.error = error.localizedDescription } }
-                            }
-                        }
-                    } label: { Image(systemName: recorder.recording ? "stop.circle.fill" : "mic").font(.system(size: 21)).frame(width: 44, height: 44) }
-                    .accessibilityLabel(recorder.recording ? "停止录音" : "录制语音").disabled(sending || preparing || image != nil || recorder.requestingPermission)
                     TextField("输入私信", text: $draft, axis: .vertical)
                         .lineLimit(1...5).textFieldStyle(.plain)
                         .padding(.horizontal, 12).padding(.vertical, 10).frame(minHeight: 44)
                         .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 20))
                         .accessibilityIdentifier("private-message-input")
-                        .disabled(sending || recorder.recording)
-                    Button { showsEmoticons.toggle() } label: { Image(systemName: "face.smiling").font(.system(size: 21)).frame(width: 44, height: 44) }.accessibilityLabel("贴吧表情").disabled(sending || recorder.recording)
-                    PhotosPicker(selection: $photo, matching: .images) { Image(systemName: "photo").font(.system(size: 21)).frame(width: 44, height: 44) }.accessibilityLabel("选择私信图片").disabled(sending || preparing || recorder.recording || recorder.requestingPermission || recorder.attachment != nil)
+                        .disabled(sending)
+                    Button { showsEmoticons.toggle() } label: { Image(systemName: "face.smiling").font(.system(size: 21)).frame(width: 44, height: 44) }.accessibilityLabel("贴吧表情").disabled(sending)
+                    Button(sending ? "发送中" : "发送") { send(peer) }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(sending || uncertain || loading || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 5_000)
+                        .accessibilityLabel("发送私信")
                 }
                 if showsEmoticons {
                     ScrollView(.horizontal) {
@@ -219,8 +185,6 @@ struct PrivateMessagesView: View {
                         }
                     }.frame(height: 48)
                 }
-                Button(sending ? "发送中" : image != nil ? "发送图片" : recorder.attachment != nil ? "发送语音" : "发送") { send(peer) }
-                    .disabled(sending || uncertain || loading || preparing || recorder.recording || recorder.requestingPermission || (image == nil && recorder.attachment == nil && (draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 5_000)))
             }.padding(.horizontal).padding(.vertical, 8).background(.regularMaterial)
         }
     }
@@ -237,21 +201,6 @@ struct PrivateMessagesView: View {
         } else {
             InlineContentText(blocks: TiebaEmoticon.blocks(from: message.text), allowsTextSelection: true, maximumContentWidth: 280)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-    private func preparePhoto() {
-        guard let photo else { return }
-        let requestGeneration = generation
-        preparing = true
-        action = Task { @MainActor in
-            defer { if generation == requestGeneration { preparing = false } }
-            do {
-                guard let data = try await photo.loadTransferable(type: Data.self) else { throw PrivateMessageError.invalidResponse }
-                let decoded = try await Task.detached { try ContentComposerImageDecoder.decode(data) }.value
-                try Task.checkCancellation()
-                guard active, generation == requestGeneration else { return }
-                image = decoded
-            } catch { if active && generation == requestGeneration && !Task.isCancelled { self.error = error.localizedDescription } }
         }
     }
     private func markAllRead() {
@@ -296,7 +245,7 @@ struct PrivateMessagesView: View {
         } catch { if active && generation == requestGeneration && !Task.isCancelled { self.error = error.localizedDescription } }
     }
     private func loadMore() {
-        guard let before = cursor, !loading, !sending, !preparing, !recorder.recording, !recorder.requestingPermission else { return }
+        guard let before = cursor, !loading, !sending else { return }
         loading = true
         let requestGeneration = generation, target = selected
         action = Task { @MainActor in
@@ -335,7 +284,7 @@ struct PrivateMessagesView: View {
     }
     private func switchConversation(_ peer: PrivateConversation?) {
         action?.cancel(); generation += 1
-        recorder.discard(); image = nil; photo = nil; preparing = false; showsEmoticons = false
+        showsEmoticons = false
         selected = peer; messages = []; draft = ""; uncertain = false; error = nil
         cursor = nil; hasMore = false; loading = false; sending = false
     }
@@ -343,30 +292,15 @@ struct PrivateMessagesView: View {
         guard !sending, !uncertain, active else { return }
         sending = true; error = nil
         let text = draft, requestGeneration = generation
-        let attachment = image, voice = recorder.attachment, duration = recorder.duration
         action = Task { @MainActor in
             defer { if active && generation == requestGeneration { sending = false } }
             do {
                 guard try await environment.accountStore.load()?.sessionIdentity == account.sessionIdentity else { throw CancellationError() }
                 try Task.checkCancellation(); guard active else { return }
                 let key = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10).lowercased()
-                let payload: String, type: Int
-                if let attachment {
-                    let groupID = try await client.personalGroupID(account: account)
-                    try Task.checkCancellation()
-                    guard active, generation == requestGeneration, selected?.id == peer.id else { throw CancellationError() }
-                    payload = try await PrivateMessageMediaUpload.image(attachment, account: account, groupID: groupID, clientID: client.cuid); type = 2
-                } else if let voice {
-                    payload = try await PrivateMessageMediaUpload.voice(voice, duration: duration, account: account, clientID: client.cuid); type = 3
-                } else { payload = text; type = 1 }
-                try Task.checkCancellation()
-                guard active, generation == requestGeneration, selected?.id == peer.id,
-                      try await environment.accountStore.load()?.sessionIdentity == account.sessionIdentity else { throw CancellationError() }
-                _ = try await client.send(payload, to: peer, account: account, key: key, type: type)
+                _ = try await client.send(text, to: peer, account: account, key: key)
                 try Task.checkCancellation(); guard active, generation == requestGeneration, selected?.id == peer.id else { return }
-                if type == 1 { draft = "" }
-                else if type == 2 { image = nil; photo = nil }
-                else { recorder.discard() }
+                draft = ""
                 revision += 1
             } catch {
                 if active && generation == requestGeneration && selected?.id == peer.id && !Task.isCancelled {
@@ -376,4 +310,5 @@ struct PrivateMessagesView: View {
             }
         }
     }
+
 }

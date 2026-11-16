@@ -5,11 +5,12 @@ import android.graphics.Rect
 import android.graphics.Typeface
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,7 +24,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -123,11 +130,30 @@ import java.util.UUID
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun PrivateMessagesScreen(vm: AppViewModel, account: Account, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     var showEmoticons by remember { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<String?>(null) }
-    var playVoice by remember { mutableStateOf<String?>(null) }
+    var playingVoice by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val voicePlayer = remember { androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+        setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH).build(), true)
+    } }
+    val voiceOwner = LocalLifecycleOwner.current
+    DisposableEffect(voicePlayer, voiceOwner) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_ENDED || state == androidx.media3.common.Player.STATE_IDLE) playingVoice = null
+            }
+        }
+        voicePlayer.addListener(listener)
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) { voicePlayer.pause(); playingVoice = null }
+        }
+        voiceOwner.lifecycle.addObserver(observer)
+        onDispose { voiceOwner.lifecycle.removeObserver(observer); voicePlayer.removeListener(listener); voicePlayer.release() }
+    }
     var conversations by remember { mutableStateOf(emptyList<PrivateConversation>()) }
     var messages by remember { mutableStateOf(emptyList<PrivateChatMessage>()) }
     var selected by remember(vm.route.id) { mutableStateOf(vm.route.id.takeIf { (it.toLongOrNull() ?: 0) > 0 }?.let { runCatching { PrivateConversation.recipient(User(it, vm.route.title), account.uid) }.getOrNull() }) }
@@ -281,23 +307,66 @@ import java.util.UUID
                         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (mine && item.read) Text("已读", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             val isImage = item.type == 2 && item.mediaURL != null
-                            Surface(color = when { isImage -> Color.Transparent; mine -> MaterialTheme.colorScheme.primaryContainer; else -> MaterialTheme.colorScheme.surfaceContainer }, shape = MaterialTheme.shapes.medium) {
+                            Surface(
+                                color = when {
+                                    isImage -> Color.Transparent
+                                    mine -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                            ) {
                                 when {
                                     isImage -> coil.compose.AsyncImage(item.mediaURL, "私信图片，点按查看", Modifier.sizeIn(maxWidth = 240.dp, maxHeight = 260.dp).clickable { previewImage = item.mediaURL })
-                                    item.voiceMD5 != null -> TextButton(onClick = { playVoice = PrivateMessageContent.voiceURL(item.voiceMD5) }) { Text("▶ 语音 ${item.duration}秒") }
+                                    item.voiceMD5 != null -> {
+                                        val voiceURL = remember(item.voiceMD5) { PrivateMessageContent.voiceURL(item.voiceMD5) }
+                                        val playing = playingVoice == item.id
+                                        VoiceBubble(playing = playing, seconds = item.duration, onClick = {
+                                            if (voiceURL == null) return@VoiceBubble
+                                            if (playing) { voicePlayer.pause(); playingVoice = null }
+                                            else {
+                                                voicePlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(voiceURL))
+                                                voicePlayer.prepare(); voicePlayer.play(); playingVoice = item.id
+                                            }
+                                        })
+                                    }
                                     else -> NativeEmoticonText(TiebaEmoticon.parts(item.text), fontSize = 17.sp, modifier = Modifier.padding(12.dp).widthIn(max = 280.dp))
                                 }
                             }
                         }
-                        if (item.timestamp > 0) Text(SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(item.timestamp * 1000)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (item.timestamp > 0) Text(
+                            SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(item.timestamp * 1000)),
+                            Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
                     }
                 }
             }
             // The screen already reserves the keyboard inset supplied by FrostedAppShell.
-            Column(Modifier.fillMaxWidth().testTag("private-chat-composer").padding(12.dp)) {
+            Column(Modifier.fillMaxWidth().testTag("private-chat-composer").padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    OutlinedTextField(value = draft, onValueChange = { if (it.length <= 5000) draft = it }, placeholder = { Text("输入私信") }, modifier = Modifier.weight(1f).heightIn(min = 56.dp), shape = RoundedCornerShape(24.dp), maxLines = 5, enabled = !sending)
-                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(48.dp), enabled = !sending) { Icon(Icons.Default.Face, "贴吧表情", Modifier.size(24.dp)) }
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { if (it.length <= 5000) draft = it },
+                        modifier = Modifier.weight(1f).testTag("private-message-input"),
+                        enabled = !sending,
+                        maxLines = 5,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .heightIn(min = 44.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                if (draft.isEmpty()) Text("输入私信", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                inner()
+                            }
+                        },
+                    )
+                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(44.dp), enabled = !sending) { SmileyIcon(Modifier.size(22.dp)) }
                     TextButton(contentPadding = PaddingValues(horizontal = 8.dp), enabled = !sending && !uncertain && !loading && draft.isNotBlank() && draft.length <= 5000, onClick = {
                         if (!current() || sending || uncertain) return@TextButton
                         sending = true; error = null
@@ -329,7 +398,6 @@ import java.util.UUID
     previewImage?.let { url -> androidx.compose.ui.window.Dialog(onDismissRequest = { previewImage = null }) {
         coil.compose.AsyncImage(url, "私信图片", Modifier.fillMaxWidth().clickable { previewImage = null })
     } }
-    playVoice?.let { url -> androidx.compose.ui.window.Dialog(onDismissRequest = { playVoice = null }) { MediaPlayer(url) } }
     if (newMessage && chooseFollowing) FollowedPrivateRecipientPicker(vm, account, onDismiss = { chooseFollowing = false }, onSelected = { openRecipient(it) })
     else if (newMessage) AlertDialog(onDismissRequest = { action?.cancel(); resolving = false; newMessage = false }, title = { Text("发起私信") }, text = {
         Column {
@@ -395,4 +463,69 @@ import java.util.UUID
             }
         }
     }, confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("返回") } })
+}
+
+@Composable private fun VoiceBubble(playing: Boolean, seconds: Int, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .semantics { stateDescription = if (playing) "正在播放" else "未播放" }
+            .clickable(onClick = onClick)
+            .widthIn(min = 152.dp, max = 280.dp)
+            .heightIn(min = 44.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (playing) PauseGlyph(Modifier.size(17.dp)) else Icon(
+                Icons.Default.PlayArrow,
+                "播放语音",
+                Modifier.size(17.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column {
+                Text(if (playing) "播放中" else "语音", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable private fun PauseGlyph(modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.primary
+    Canvas(modifier) {
+        val barWidth = size.width * 0.26f
+        val gap = size.width * 0.2f
+        val top = size.height * 0.16f
+        val height = size.height * 0.68f
+        val radius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
+        drawRoundRect(tint, androidx.compose.ui.geometry.Offset((size.width - barWidth * 2 - gap) / 2f, top), androidx.compose.ui.geometry.Size(barWidth, height), radius)
+        drawRoundRect(tint, androidx.compose.ui.geometry.Offset((size.width - barWidth * 2 - gap) / 2f + barWidth + gap, top), androidx.compose.ui.geometry.Size(barWidth, height), radius)
+    }
+}
+
+@Composable private fun SmileyIcon(modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    Canvas(modifier) {
+        val stroke = 1.6.dp.toPx()
+        val r = size.minDimension / 2f - stroke / 2f
+        drawCircle(tint, radius = r, style = Stroke(stroke))
+        val eye = stroke * 1.1f
+        drawCircle(tint, radius = eye, center = androidx.compose.ui.geometry.Offset(center.x - r * 0.36f, center.y - r * 0.24f))
+        drawCircle(tint, radius = eye, center = androidx.compose.ui.geometry.Offset(center.x + r * 0.36f, center.y - r * 0.24f))
+        drawArc(
+            color = tint,
+            startAngle = 25f,
+            sweepAngle = 130f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(center.x - r * 0.55f, center.y - r * 0.42f),
+            size = androidx.compose.ui.geometry.Size(r * 1.1f, r * 1.1f),
+            style = Stroke(stroke, cap = StrokeCap.Round),
+        )
+    }
 }

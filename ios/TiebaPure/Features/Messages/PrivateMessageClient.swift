@@ -64,10 +64,9 @@ enum PrivateMessageContent {
               let seconds = Double(String(describing: value)), seconds.isFinite else { return 0 }
         return Int(min(max(seconds, 0), 600).rounded(.up))
     }
-    static func validate(_ content: String, type: Int) throws {
+    static func validate(_ content: String) throws {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              content.utf8.count <= (type == 1 ? 20_000 : 65_536), type != 1 || content.count <= 5_000,
-              type == 1 || type == 2 && imageURL(content) != nil || type == 3 && voiceMD5(content) != nil && (1...600).contains(integer(body(content)?["during_time"]) ?? 0) else {
+              content.utf8.count <= 20_000, content.count <= 5_000 else {
             throw PrivateMessageError.invalidResponse
         }
     }
@@ -141,28 +140,18 @@ final class PrivateMessageClient: ObservableObject {
     func conversations(account: Account, before: Int64? = nil) async throws -> PrivateMessagePage<PrivateConversation> {
         try await synchronize(account).conversations()
     }
-    func personalGroupID(account: Account) async throws -> Int64 {
-        try Task.checkCancellation()
-        let cached = try inbox(account)
-        let store = cached.state.groups.contains { $0.type == 6 && $0.id > 0 } ? cached : try await synchronize(account)
-        try Task.checkCancellation()
-        guard let group = store.state.groups.first(where: { $0.type == 6 && $0.id > 0 }) else {
-            throw ContentSubmissionError.unsupported(message: "未取得当前账号的私信图片上传分组，请刷新会话后重试。")
-        }
-        return group.id
-    }
     func messages(_ peer: PrivateConversation, account: Account, before: Int64? = nil) async throws -> PrivateMessagePage<PrivateChatMessage> {
         let inbox: OfficialPrivateInbox
         if before == nil { inbox = try await synchronize(account) } else { inbox = try self.inbox(account) }
         return try inbox.messages(peer.userID, before: before)
     }
-    func send(_ text: String, to peer: PrivateConversation, account: Account, key: String, type: Int = 1) async throws -> String {
-        try PrivateMessageContent.validate(text, type: type)
+    func send(_ text: String, to peer: PrivateConversation, account: Account, key: String) async throws -> String {
+        try PrivateMessageContent.validate(text)
         guard let uid = Int64(peer.userID), uid > 0, String(uid) == peer.userID, peer.userID != account.uid else { throw PrivateMessageError.invalidUser }
         let inbox = try inbox(account)
         let record = Int64(Date().timeIntervalSince1970 * 1_000_000)
         var request = Tiebapure_Official_CommitRequest()
-        request.data.toUid = uid; request.data.toUserType = 0; request.data.msgType = Int32(type)
+        request.data.toUid = uid; request.data.toUserType = 0; request.data.msgType = 1
         request.data.content = text; request.data.recordID = record
         let response: Tiebapure_Official_CommitResponse
         do {
@@ -176,7 +165,7 @@ final class PrivateMessageClient: ObservableObject {
         guard response.error.code == 0 else { throw PrivateMessageError.rejected(Int(response.error.code)) }
         let receipt = response.data
         guard receipt.id > 0, receipt.toUid == uid, receipt.recordID == record else { throw PrivateMessageError.unknownSend }
-        do { try inbox.sent(text, to: peer, account: account, receipt: receipt, type: type) } catch { throw PrivateMessageError.unknownSend }
+        do { try inbox.sent(text, to: peer, account: account, receipt: receipt, type: 1) } catch { throw PrivateMessageError.unknownSend }
         return String(receipt.id)
     }
 }
