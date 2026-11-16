@@ -1,5 +1,10 @@
 # 当前进展
 
+## 2026-11-16 iOS 私信图片与语音取消气泡底色（本地源码）
+
+- `ios/TiebaPure/Features/Messages/PrivateMessagesView.swift` 新增 `bubbleBody(_:mine:)` 与 `showsBubbleChrome(_:)`：文本仍走 `messageBody().padding(12).background(blue 12% / secondary 8%, cornerRadius: 14)`；`type == 2` 且有 `mediaURL` 的图片消息、以及 `voiceMD5 != nil` 的语音消息不再套气泡与 12pt 内边距，直接渲染图片或 `VoicePlaybackControl`（后者自带 `readerSecondarySurface` 底色与 8pt 圆角）。
+- 验证：`xcodebuild -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build` → BUILD SUCCEEDED；`build-ios.sh signed-archive` → ARCHIVE SUCCEEDED，`export` → EXPORT SUCCEEDED，产物 `build/latest/TiebaPure-2.4.ipa`（2.4 / 89，sha a9b3211dff28908c6feb5d91cbc5afb72e5a99617f75ea01a6ba2013ff690768）。
+
 ## 2026-11-16 Android 私信气泡与输入区对齐 iOS 设计（本地源码）
 
 - 气泡：背景改成 iOS 同款半透明底色（自己 `primary` 12%，对方 `onSurface` 8%），统一 14dp 圆角（原先 Android 用 primaryContainer/surfaceContainer 加不对称尾角），去掉了 Material3 的 tonal 抬升。

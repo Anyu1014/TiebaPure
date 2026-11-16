@@ -148,7 +148,7 @@ struct PrivateMessagesView: View {
                                 VStack(alignment: mine ? .trailing : .leading, spacing: 5) {
                                     HStack(alignment: .bottom, spacing: 6) {
                                         if mine && message.read { Text("已读").font(.caption2).foregroundStyle(.secondary) }
-                                        messageBody(message).padding(12).background(mine ? Color.blue.opacity(0.12) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                                        bubbleBody(message, mine: mine)
                                     }
                                     if message.timestamp > 0 { Text(Date(timeIntervalSince1970: Double(message.timestamp)), format: .dateTime.month().day().hour().minute()).font(.caption2).foregroundStyle(.secondary) }
                                 }
@@ -187,6 +187,18 @@ struct PrivateMessagesView: View {
                 }
             }.padding(.horizontal).padding(.vertical, 8).background(.regularMaterial)
         }
+    }
+    @ViewBuilder private func bubbleBody(_ message: PrivateChatMessage, mine: Bool) -> some View {
+        if showsBubbleChrome(message) {
+            messageBody(message).padding(12).background(mine ? Color.blue.opacity(0.12) : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        } else {
+            messageBody(message)
+        }
+    }
+    private func showsBubbleChrome(_ message: PrivateChatMessage) -> Bool {
+        if message.type == 2, message.mediaURL != nil { return false }
+        if message.voiceMD5 != nil { return false }
+        return true
     }
     @ViewBuilder private func messageBody(_ message: PrivateChatMessage) -> some View {
         if message.type == 2, let url = message.mediaURL {
