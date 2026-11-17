@@ -123,6 +123,16 @@ nonisolated struct Tieba_PersonalizedRequestData: @unchecked Sendable {
   /// Clears the value of `appPos`. Subsequent reads from it will return its default value.
   mutating func clearAppPos() {_uniqueStorage()._appPos = nil}
 
+  var isNewfeed: Int32 {
+    get {_storage._isNewfeed}
+    set {_uniqueStorage()._isNewfeed = newValue}
+  }
+
+  var cacheColumnStyle: Int32 {
+    get {_storage._cacheColumnStyle}
+    set {_uniqueStorage()._cacheColumnStyle = newValue}
+  }
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
@@ -151,6 +161,178 @@ nonisolated struct Tieba_PersonalizedRequest: Sendable {
   fileprivate var _data: Tieba_PersonalizedRequestData? = nil
 }
 
+nonisolated struct Tieba_PersonalizedFeedKV: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var key: String = String()
+
+  var value: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+nonisolated struct Tieba_PersonalizedFeedText: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var text: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+nonisolated struct Tieba_PersonalizedFeedResource: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var type: Int32 = 0
+
+  var textInfo: Tieba_PersonalizedFeedText {
+    get {_textInfo ?? Tieba_PersonalizedFeedText()}
+    set {_textInfo = newValue}
+  }
+  /// Returns true if `textInfo` has been explicitly set.
+  var hasTextInfo: Bool {self._textInfo != nil}
+  /// Clears the value of `textInfo`. Subsequent reads from it will return its default value.
+  mutating func clearTextInfo() {self._textInfo = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _textInfo: Tieba_PersonalizedFeedText? = nil
+}
+
+nonisolated struct Tieba_PersonalizedPostExposeHead: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var imgURL: String = String()
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+nonisolated struct Tieba_PersonalizedPostExpose: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var schema: String = String()
+
+  var stampURL: String = String()
+
+  var floor: [Tieba_PersonalizedFeedResource] = []
+
+  var headImg: Tieba_PersonalizedPostExposeHead {
+    get {_headImg ?? Tieba_PersonalizedPostExposeHead()}
+    set {_headImg = newValue}
+  }
+  /// Returns true if `headImg` has been explicitly set.
+  var hasHeadImg: Bool {self._headImg != nil}
+  /// Clears the value of `headImg`. Subsequent reads from it will return its default value.
+  mutating func clearHeadImg() {self._headImg = nil}
+
+  var businessInfo: [Tieba_PersonalizedFeedKV] = []
+
+  var headText: String = String()
+
+  var headAgree: Tieba_Agree {
+    get {_headAgree ?? Tieba_Agree()}
+    set {_headAgree = newValue}
+  }
+  /// Returns true if `headAgree` has been explicitly set.
+  var hasHeadAgree: Bool {self._headAgree != nil}
+  /// Clears the value of `headAgree`. Subsequent reads from it will return its default value.
+  mutating func clearHeadAgree() {self._headAgree = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _headImg: Tieba_PersonalizedPostExposeHead? = nil
+  fileprivate var _headAgree: Tieba_Agree? = nil
+}
+
+nonisolated struct Tieba_PersonalizedComponent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var feedPostexpose: Tieba_PersonalizedPostExpose {
+    get {_feedPostexpose ?? Tieba_PersonalizedPostExpose()}
+    set {_feedPostexpose = newValue}
+  }
+  /// Returns true if `feedPostexpose` has been explicitly set.
+  var hasFeedPostexpose: Bool {self._feedPostexpose != nil}
+  /// Clears the value of `feedPostexpose`. Subsequent reads from it will return its default value.
+  mutating func clearFeedPostexpose() {self._feedPostexpose = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _feedPostexpose: Tieba_PersonalizedPostExpose? = nil
+}
+
+nonisolated struct Tieba_PersonalizedFeedLayout: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var components: [Tieba_PersonalizedComponent] = []
+
+  var businessInfo: [Tieba_PersonalizedFeedKV] = []
+
+  var componentsNewStyle: [Tieba_PersonalizedComponent] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
+nonisolated struct Tieba_PersonalizedLayoutFactory: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var feed: Tieba_PersonalizedFeedLayout {
+    get {_feed ?? Tieba_PersonalizedFeedLayout()}
+    set {_feed = newValue}
+  }
+  /// Returns true if `feed` has been explicitly set.
+  var hasFeed: Bool {self._feed != nil}
+  /// Clears the value of `feed`. Subsequent reads from it will return its default value.
+  mutating func clearFeed() {self._feed = nil}
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+
+  fileprivate var _feed: Tieba_PersonalizedFeedLayout? = nil
+}
+
+nonisolated struct Tieba_PersonalizedPageData: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  var feedList: [Tieba_PersonalizedLayoutFactory] = []
+
+  var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 nonisolated struct Tieba_PersonalizedResponseData: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -158,9 +340,20 @@ nonisolated struct Tieba_PersonalizedResponseData: Sendable {
 
   var threadList: [Tieba_ThreadInfo] = []
 
+  var pageData: Tieba_PersonalizedPageData {
+    get {_pageData ?? Tieba_PersonalizedPageData()}
+    set {_pageData = newValue}
+  }
+  /// Returns true if `pageData` has been explicitly set.
+  var hasPageData: Bool {self._pageData != nil}
+  /// Clears the value of `pageData`. Subsequent reads from it will return its default value.
+  mutating func clearPageData() {self._pageData = nil}
+
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
+
+  fileprivate var _pageData: Tieba_PersonalizedPageData? = nil
 }
 
 nonisolated struct Tieba_PersonalizedResponse: Sendable {
@@ -200,7 +393,7 @@ fileprivate nonisolated let _protobuf_package = "tieba"
 
 nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".PersonalizedRequestData"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}common\0\u{3}tag_code\0\u{3}need_tags\0\u{3}load_type\0\u{3}page_thread_count\0\u{1}pn\0\u{3}sug_count\0\u{3}scr_w\0\u{3}scr_h\0\u{3}scr_dip\0\u{3}q_type\0\u{4}\u{b}need_forumlist\0\u{3}new_net_type\0\u{4}\u{3}pre_ad_thread_count\0\u{3}new_install\0\u{3}request_times\0\u{3}invoke_source\0\u{4}\u{7}app_pos\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}common\0\u{3}tag_code\0\u{3}need_tags\0\u{3}load_type\0\u{3}page_thread_count\0\u{1}pn\0\u{3}sug_count\0\u{3}scr_w\0\u{3}scr_h\0\u{3}scr_dip\0\u{3}q_type\0\u{4}\u{b}need_forumlist\0\u{3}new_net_type\0\u{4}\u{3}pre_ad_thread_count\0\u{3}new_install\0\u{3}request_times\0\u{3}invoke_source\0\u{4}\u{7}app_pos\0\u{4}\u{4}is_newfeed\0\u{4}\u{6}cache_column_style\0")
 
   fileprivate class _StorageClass {
     var _common: Tieba_CommonRequest? = nil
@@ -221,6 +414,8 @@ nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, Swif
     var _requestTimes: Int32 = 0
     var _invokeSource: String = String()
     var _appPos: Tieba_AppPosInfo? = nil
+    var _isNewfeed: Int32 = 0
+    var _cacheColumnStyle: Int32 = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -249,6 +444,8 @@ nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, Swif
       _requestTimes = source._requestTimes
       _invokeSource = source._invokeSource
       _appPos = source._appPos
+      _isNewfeed = source._isNewfeed
+      _cacheColumnStyle = source._cacheColumnStyle
     }
   }
 
@@ -285,6 +482,8 @@ nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, Swif
         case 28: try { try decoder.decodeSingularInt32Field(value: &_storage._requestTimes) }()
         case 29: try { try decoder.decodeSingularStringField(value: &_storage._invokeSource) }()
         case 36: try { try decoder.decodeSingularMessageField(value: &_storage._appPos) }()
+        case 40: try { try decoder.decodeSingularInt32Field(value: &_storage._isNewfeed) }()
+        case 46: try { try decoder.decodeSingularInt32Field(value: &_storage._cacheColumnStyle) }()
         default: break
         }
       }
@@ -351,6 +550,12 @@ nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, Swif
       try { if let v = _storage._appPos {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
       } }()
+      if _storage._isNewfeed != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._isNewfeed, fieldNumber: 40)
+      }
+      if _storage._cacheColumnStyle != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._cacheColumnStyle, fieldNumber: 46)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -378,6 +583,8 @@ nonisolated extension Tieba_PersonalizedRequestData: SwiftProtobuf.Message, Swif
         if _storage._requestTimes != rhs_storage._requestTimes {return false}
         if _storage._invokeSource != rhs_storage._invokeSource {return false}
         if _storage._appPos != rhs_storage._appPos {return false}
+        if _storage._isNewfeed != rhs_storage._isNewfeed {return false}
+        if _storage._cacheColumnStyle != rhs_storage._cacheColumnStyle {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -421,9 +628,345 @@ nonisolated extension Tieba_PersonalizedRequest: SwiftProtobuf.Message, SwiftPro
   }
 }
 
+nonisolated extension Tieba_PersonalizedFeedKV: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedFeedKV"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}value\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.key) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.value) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.key.isEmpty {
+      try visitor.visitSingularStringField(value: self.key, fieldNumber: 1)
+    }
+    if !self.value.isEmpty {
+      try visitor.visitSingularStringField(value: self.value, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedFeedKV, rhs: Tieba_PersonalizedFeedKV) -> Bool {
+    if lhs.key != rhs.key {return false}
+    if lhs.value != rhs.value {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedFeedText: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedFeedText"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedFeedText, rhs: Tieba_PersonalizedFeedText) -> Bool {
+    if lhs.text != rhs.text {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedFeedResource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedFeedResource"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{4}\u{7}text_info\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.type) }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._textInfo) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.type != 0 {
+      try visitor.visitSingularInt32Field(value: self.type, fieldNumber: 1)
+    }
+    try { if let v = self._textInfo {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedFeedResource, rhs: Tieba_PersonalizedFeedResource) -> Bool {
+    if lhs.type != rhs.type {return false}
+    if lhs._textInfo != rhs._textInfo {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedPostExposeHead: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedPostExposeHead"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}img_url\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.imgURL) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.imgURL.isEmpty {
+      try visitor.visitSingularStringField(value: self.imgURL, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedPostExposeHead, rhs: Tieba_PersonalizedPostExposeHead) -> Bool {
+    if lhs.imgURL != rhs.imgURL {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedPostExpose: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedPostExpose"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}schema\0\u{3}stamp_url\0\u{1}floor\0\u{3}head_img\0\u{3}business_info\0\u{3}head_text\0\u{3}head_agree\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.schema) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.stampURL) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.floor) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._headImg) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.businessInfo) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.headText) }()
+      case 7: try { try decoder.decodeSingularMessageField(value: &self._headAgree) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.schema.isEmpty {
+      try visitor.visitSingularStringField(value: self.schema, fieldNumber: 1)
+    }
+    if !self.stampURL.isEmpty {
+      try visitor.visitSingularStringField(value: self.stampURL, fieldNumber: 2)
+    }
+    if !self.floor.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.floor, fieldNumber: 3)
+    }
+    try { if let v = self._headImg {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    if !self.businessInfo.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.businessInfo, fieldNumber: 5)
+    }
+    if !self.headText.isEmpty {
+      try visitor.visitSingularStringField(value: self.headText, fieldNumber: 6)
+    }
+    try { if let v = self._headAgree {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedPostExpose, rhs: Tieba_PersonalizedPostExpose) -> Bool {
+    if lhs.schema != rhs.schema {return false}
+    if lhs.stampURL != rhs.stampURL {return false}
+    if lhs.floor != rhs.floor {return false}
+    if lhs._headImg != rhs._headImg {return false}
+    if lhs.businessInfo != rhs.businessInfo {return false}
+    if lhs.headText != rhs.headText {return false}
+    if lhs._headAgree != rhs._headAgree {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedComponent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedComponent"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{4}\u{14}feed_postexpose\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 20: try { try decoder.decodeSingularMessageField(value: &self._feedPostexpose) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._feedPostexpose {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedComponent, rhs: Tieba_PersonalizedComponent) -> Bool {
+    if lhs._feedPostexpose != rhs._feedPostexpose {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedFeedLayout: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedFeedLayout"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}components\0\u{4}\u{4}business_info\0\u{4}\u{6}components_new_style\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.components) }()
+      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.businessInfo) }()
+      case 11: try { try decoder.decodeRepeatedMessageField(value: &self.componentsNewStyle) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.components.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.components, fieldNumber: 1)
+    }
+    if !self.businessInfo.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.businessInfo, fieldNumber: 5)
+    }
+    if !self.componentsNewStyle.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.componentsNewStyle, fieldNumber: 11)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedFeedLayout, rhs: Tieba_PersonalizedFeedLayout) -> Bool {
+    if lhs.components != rhs.components {return false}
+    if lhs.businessInfo != rhs.businessInfo {return false}
+    if lhs.componentsNewStyle != rhs.componentsNewStyle {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedLayoutFactory: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedLayoutFactory"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}feed\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._feed) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._feed {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedLayoutFactory, rhs: Tieba_PersonalizedLayoutFactory) -> Bool {
+    if lhs._feed != rhs._feed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Tieba_PersonalizedPageData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = _protobuf_package + ".PersonalizedPageData"
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}feed_list\0")
+
+  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.feedList) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.feedList.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.feedList, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: Tieba_PersonalizedPageData, rhs: Tieba_PersonalizedPageData) -> Bool {
+    if lhs.feedList != rhs.feedList {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Tieba_PersonalizedResponseData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".PersonalizedResponseData"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{4}\u{2}thread_list\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{4}\u{2}thread_list\0\u{4}\u{19}page_data\0")
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -432,20 +975,29 @@ nonisolated extension Tieba_PersonalizedResponseData: SwiftProtobuf.Message, Swi
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.threadList) }()
+      case 27: try { try decoder.decodeSingularMessageField(value: &self._pageData) }()
       default: break
       }
     }
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.threadList.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.threadList, fieldNumber: 2)
     }
+    try { if let v = self._pageData {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 27)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: Tieba_PersonalizedResponseData, rhs: Tieba_PersonalizedResponseData) -> Bool {
     if lhs.threadList != rhs.threadList {return false}
+    if lhs._pageData != rhs._pageData {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

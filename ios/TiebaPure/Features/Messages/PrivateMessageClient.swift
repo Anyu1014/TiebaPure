@@ -83,13 +83,15 @@ struct PrivateMessagePage<Item> {
 
 enum PrivateMessageError: LocalizedError {
     case invalidResponse, invalidUser, recipientUnavailable, rejected(Int, message: String = ""), unknownSend
+    case transport(String)
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return "私信响应无法识别，请稍后刷新。"
         case .invalidUser: return "请输入有效的贴吧 ID，或从对方主页进入私信。"
         case .recipientUnavailable: return "该用户的私信身份暂不可用，请从对方主页重新进入。"
         case .rejected(let code, let message): return "贴吧私信请求未通过（\(code)）。" + (message.isEmpty ? "请稍后重试。" : message)
-        case .unknownSend: return "发送结果无法确认，请先刷新消息核对，避免重复发送。"
+        case .unknownSend: return "未收到发送结果，可继续发送。"
+        case .transport(let detail): return "私信发送失败：\(detail)"
         }
     }
 }
@@ -101,6 +103,7 @@ final class PrivateMessageClient: ObservableObject {
     let cuid: String
     private let directory: URL?
     private var inboxes: [String: OfficialPrivateInbox] = [:]
+    private var lastPrivateRecord: Int64 = 0
     private static var persistentInboxes: [URL: OfficialPrivateInbox] = [:]
     init(cuid: String = UUID().uuidString.replacingOccurrences(of: "-", with: "").uppercased(), directory: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("official-private-messages")) {
         self.cuid = cuid; self.directory = directory
@@ -137,6 +140,8 @@ final class PrivateMessageClient: ObservableObject {
     func hasCachedUnread(account: Account) throws -> Bool {
         try inbox(account).conversations().items.contains { $0.unread > 0 }
     }
+    func cachedConversations(account: Account) throws -> PrivateMessagePage<PrivateConversation> { try inbox(account).conversations() }
+    func cachedMessages(_ peer: PrivateConversation, account: Account) throws -> PrivateMessagePage<PrivateChatMessage> { try inbox(account).messages(peer.userID, before: nil) }
     func conversations(account: Account, before: Int64? = nil) async throws -> PrivateMessagePage<PrivateConversation> {
         try await synchronize(account).conversations()
     }
@@ -149,7 +154,8 @@ final class PrivateMessageClient: ObservableObject {
         try PrivateMessageContent.validate(text)
         guard let uid = Int64(peer.userID), uid > 0, String(uid) == peer.userID, peer.userID != account.uid else { throw PrivateMessageError.invalidUser }
         let inbox = try inbox(account)
-        let record = Int64(Date().timeIntervalSince1970 * 1_000_000)
+        let record = max(Int64(Date().timeIntervalSince1970 * 1_000_000), lastPrivateRecord + 1)
+        lastPrivateRecord = record
         var request = Tiebapure_Official_CommitRequest()
         request.data.toUid = uid; request.data.toUserType = 0; request.data.msgType = 1
         request.data.content = text; request.data.recordID = record
@@ -160,11 +166,16 @@ final class PrivateMessageClient: ObservableObject {
                 try Tiebapure_Official_CommitResponse(serializedBytes: await transport.request(205001, data: request.serializedData()))
             } }
         } catch PrivateMessageError.rejected(let code, let message) { throw PrivateMessageError.rejected(code, message: message) }
-        catch { throw PrivateMessageError.unknownSend }
-        guard response.hasError else { throw PrivateMessageError.unknownSend }
-        guard response.error.code == 0 else { throw PrivateMessageError.rejected(Int(response.error.code)) }
-        let receipt = response.data
-        guard receipt.id > 0, receipt.toUid == uid, receipt.recordID == record else { throw PrivateMessageError.unknownSend }
+        catch is CancellationError { throw CancellationError() }
+        catch { throw PrivateMessageError.transport(error.localizedDescription) }
+        if response.hasError, response.error.code != 0 { throw PrivateMessageError.rejected(Int(response.error.code), message: response.error.message) }
+        // 官方在部分场景只回 { error: { code: 0, message: "成功" } } 而不带 data，
+        // 这时没有 msg id 可核对，用本地 record 补齐，避免把成功当失败。
+        var sent = response.data
+        if !response.hasError && sent.id <= 0 { throw PrivateMessageError.unknownSend }
+        guard (!sent.hasToUid || sent.toUid == uid), (!sent.hasRecordID || sent.recordID == record) else { throw PrivateMessageError.unknownSend }
+        if sent.id <= 0 { sent.id = record; sent.toUid = uid; sent.recordID = record }
+        let receipt = sent
         do { try inbox.sent(text, to: peer, account: account, receipt: receipt, type: 1) } catch { throw PrivateMessageError.unknownSend }
         return String(receipt.id)
     }

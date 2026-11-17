@@ -111,7 +111,7 @@ struct MessagesView: View {
     }
 
     private var badgeRefreshScope: BadgeRefreshScope? {
-        guard scenePhase == .active, rootSelection?.wrappedValue == .me,
+        guard scenePhase == .active, rootSelection?.wrappedValue == .me || rootSelection?.wrappedValue == .home,
               let account else { return nil }
         return BadgeRefreshScope(session: account.sessionIdentity, tab: selectedTab)
     }

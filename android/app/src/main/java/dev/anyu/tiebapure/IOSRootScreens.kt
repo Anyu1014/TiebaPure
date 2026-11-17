@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.semantics.*
 import coil.compose.AsyncImage
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import org.json.JSONObject
 
 @Composable fun IOSAvatar(name: String, portrait: String, modifier: Modifier = Modifier, diameter: Dp = 32.dp) {
@@ -46,9 +48,11 @@ import org.json.JSONObject
     IOSAvatar(name, avatar, modifier, diameter)
 }
 
-@Composable fun ThreadRow(vm: AppViewModel, thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, forumCategory: String? = null, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, click: () -> Unit) {
+@Composable fun ThreadRow(vm: AppViewModel, thread: Thread, size: Float, loadMedia: Boolean, homeFeed: Boolean = false, forumCategory: String? = null, onForum: (() -> Unit)? = null, onUser: (() -> Unit)? = null, onBlock: (() -> Unit)? = null, onHotComment: ((Post) -> Unit)? = null, click: () -> Unit) {
     val forumFeed = forumCategory != null
     var menu by remember(thread.id) { mutableStateOf(false) }
+    var previewImage by remember(thread.id) { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
     val surface = MaterialTheme.colorScheme.surface
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val date = remember(thread.timestamp) { readerDateText(thread.timestamp) }
@@ -81,8 +85,14 @@ import org.json.JSONObject
         if (loadMedia && thread.previews.isNotEmpty()) BoxWithConstraints {
             val single = thread.previews.size == 1
             val height = maxWidth / if (single) 2 else 3
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                thread.previews.take(3).forEach { url -> Box(Modifier.weight(1f).height(height).clip(RoundedCornerShape(IOSLayout.innerRadius))) {
+            if (single && vm.originalImageRatio) {
+                var ratio by remember(thread.previews.first()) { mutableFloatStateOf(1f) }
+                AsyncImage(thread.previews.first(), "帖子预览图",
+                    Modifier.fillMaxWidth(originalImageWidthFraction(ratio)).aspectRatio(originalImageRatio(ratio)).clip(RoundedCornerShape(IOSLayout.innerRadius)).then(if (homeFeed) Modifier.clickable { previewImage = thread.previewOriginals.firstOrNull() ?: thread.previews.first() } else Modifier),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    onSuccess = { state -> val image = state.result.drawable; if (image.intrinsicWidth > 0 && image.intrinsicHeight > 0) ratio = image.intrinsicWidth.toFloat() / image.intrinsicHeight })
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                thread.previews.take(3).forEachIndexed { index, url -> Box(Modifier.weight(1f).height(height).clip(RoundedCornerShape(IOSLayout.innerRadius)).then(if (homeFeed) Modifier.clickable { previewImage = thread.previewOriginals.getOrNull(index) ?: url } else Modifier)) {
                     AsyncImage(url, "帖子预览图", Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                 } }
             }
@@ -92,6 +102,20 @@ import org.json.JSONObject
                     drawRect(Color.White, topLeft = Offset(this.size.width * .25f, this.size.height * .25f), size = androidx.compose.ui.geometry.Size(this.size.width * .7f, this.size.height * .7f), style = Stroke(1.dp.toPx()))
                 }
                 Spacer(Modifier.width(4.dp)); Text(thread.previews.size.toString(), color = Color.White, fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (homeFeed) thread.hotComment?.let { comment ->
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow).clickable { onHotComment?.invoke(comment) }.padding(10.dp).testTag("home-hot-comment-${thread.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IOSAvatar(comment.author.name, comment.author.portrait, diameter = 28.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(comment.author.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Image(painterResource(R.drawable.hot_comment_stamp), contentDescription = "热评", modifier = Modifier.width(50.dp).height(34.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Outlined.ThumbUp, "点赞数", Modifier.size(16.dp), tint = secondary)
+                    Spacer(Modifier.width(4.dp)); Text(comment.likes?.toString() ?: "—", color = secondary)
+                }
+                NativeEmoticonText(TiebaEmoticon.parts(comment.blocks.joinToString("") { it.text }), fontSize = (size * 0.9f).sp, maxLines = 2)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
@@ -104,6 +128,11 @@ import org.json.JSONObject
                 Spacer(Modifier.width(5.dp)); Text(thread.replies.toString(), fontSize = 15.sp, color = secondary)
             }
             Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.ThumbUp, "点赞数", tint = secondary, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text(thread.likes?.toString() ?: "—", fontSize = 15.sp, color = secondary) }
+        }
+    }
+    previewImage?.let { url ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { previewImage = null }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            FrostedImagePreview(url, onClose = { previewImage = null }, onSave = { (context as? MainActivity)?.saveMedia(Block(3, url = url)) })
         }
     }
     if (!homeFeed) HorizontalDivider(Modifier.padding(start = 16.dp), thickness = 0.5.dp)

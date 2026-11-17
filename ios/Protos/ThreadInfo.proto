@@ -7,6 +7,7 @@ import "Agree.proto";
 import "AlaLiveInfo.proto";
 import "Media.proto";
 import "PbContent.proto";
+import "Post.proto";
 import "SimpleForum.proto";
 import "User.proto";
 import "VideoInfo.proto";
@@ -38,6 +39,7 @@ message ThreadInfo {
   optional VideoInfo videoInfo = 79;
   optional AlaLiveInfo ala_info = 113;
   int32 agreeNum = 124;
+  Post top_agree_post = 125;
   Agree agree = 126;
   repeated PbContent firstPostContent = 142;
   SimpleForum forumInfo = 155;

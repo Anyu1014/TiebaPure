@@ -73,6 +73,15 @@ final class ThreadAuthorBadgeTests: XCTestCase {
 }
 
 final class TallImageLayoutTests: XCTestCase {
+    func testOriginalImageAdaptiveSizeAndClamping() {
+        XCTAssertEqual(OriginalImageLayoutPolicy.widthFraction(10.0 / 21.0), 1.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(OriginalImageLayoutPolicy.widthFraction(1), 0.7, accuracy: 0.001)
+        XCTAssertEqual(OriginalImageLayoutPolicy.widthFraction(21.0 / 10.0), 1, accuracy: 0.001)
+        XCTAssertEqual(OriginalImageLayoutPolicy.ratio(0.01), 10.0 / 21.0, accuracy: 0.001)
+        XCTAssertEqual(OriginalImageLayoutPolicy.ratio(100), 21.0 / 10.0, accuracy: 0.001)
+        XCTAssertEqual(OriginalImageLayoutPolicy.ratio(.nan), 1, accuracy: 0.001)
+    }
+
     func testTallImageHeightIsCappedByWidthAndAbsoluteLimit() {
         let image = ImageContent(thumbnailURL: nil, originalURL: nil, width: 100, height: 1_000, showOriginalButton: true)
 

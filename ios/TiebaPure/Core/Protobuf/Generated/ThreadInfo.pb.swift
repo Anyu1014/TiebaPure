@@ -161,6 +161,15 @@ nonisolated struct Tieba_ThreadInfo: @unchecked Sendable {
     set {_uniqueStorage()._agreeNum = newValue}
   }
 
+  var topAgreePost: Tieba_Post {
+    get {_storage._topAgreePost ?? Tieba_Post()}
+    set {_uniqueStorage()._topAgreePost = newValue}
+  }
+  /// Returns true if `topAgreePost` has been explicitly set.
+  var hasTopAgreePost: Bool {_storage._topAgreePost != nil}
+  /// Clears the value of `topAgreePost`. Subsequent reads from it will return its default value.
+  mutating func clearTopAgreePost() {_uniqueStorage()._topAgreePost = nil}
+
   var agree: Tieba_Agree {
     get {_storage._agree ?? Tieba_Agree()}
     set {_uniqueStorage()._agree = newValue}
@@ -202,7 +211,7 @@ fileprivate nonisolated let _protobuf_package = "tieba"
 
 nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = _protobuf_package + ".ThreadInfo"
-  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}threadId\0\u{1}title\0\u{1}replyNum\0\u{1}viewNum\0\u{2}\u{2}lastTimeInt\0\u{2}\u{2}isTop\0\u{1}isGood\0\u{4}\u{5}is_voice_thread\0\u{2}\u{3}author\0\u{4}\u{3}_abstract\0\u{1}media\0\u{3}voice_info\0\u{2}\u{4}forumId\0\u{1}forumName\0\u{2}\u{c}firstPostId\0\u{2}\u{5}createTime\0\u{4}\u{5}collect_status\0\u{3}collect_mark_pid\0\u{2}\u{5}authorId\0\u{4}\u{10}twzhibo_info\0\u{2}\u{7}videoInfo\0\u{4}\"ala_info\0\u{2}\u{b}agreeNum\0\u{2}\u{2}agree\0\u{2}\u{10}firstPostContent\0\u{2}\u{d}forumInfo\0\u{2}\u{1a}isDeleted\0")
+  static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}threadId\0\u{1}title\0\u{1}replyNum\0\u{1}viewNum\0\u{2}\u{2}lastTimeInt\0\u{2}\u{2}isTop\0\u{1}isGood\0\u{4}\u{5}is_voice_thread\0\u{2}\u{3}author\0\u{4}\u{3}_abstract\0\u{1}media\0\u{3}voice_info\0\u{2}\u{4}forumId\0\u{1}forumName\0\u{2}\u{c}firstPostId\0\u{2}\u{5}createTime\0\u{4}\u{5}collect_status\0\u{3}collect_mark_pid\0\u{2}\u{5}authorId\0\u{4}\u{10}twzhibo_info\0\u{2}\u{7}videoInfo\0\u{4}\"ala_info\0\u{2}\u{b}agreeNum\0\u{3}top_agree_post\0\u{1}agree\0\u{2}\u{10}firstPostContent\0\u{2}\u{d}forumInfo\0\u{2}\u{1a}isDeleted\0")
 
   fileprivate class _StorageClass {
     var _id: Int64 = 0
@@ -229,6 +238,7 @@ nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
     var _videoInfo: Tieba_VideoInfo? = nil
     var _alaInfo: Tieba_AlaLiveInfo? = nil
     var _agreeNum: Int32 = 0
+    var _topAgreePost: Tieba_Post? = nil
     var _agree: Tieba_Agree? = nil
     var _firstPostContent: [Tieba_PbContent] = []
     var _forumInfo: Tieba_SimpleForum? = nil
@@ -267,6 +277,7 @@ nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
       _videoInfo = source._videoInfo
       _alaInfo = source._alaInfo
       _agreeNum = source._agreeNum
+      _topAgreePost = source._topAgreePost
       _agree = source._agree
       _firstPostContent = source._firstPostContent
       _forumInfo = source._forumInfo
@@ -313,6 +324,7 @@ nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
         case 79: try { try decoder.decodeSingularMessageField(value: &_storage._videoInfo) }()
         case 113: try { try decoder.decodeSingularMessageField(value: &_storage._alaInfo) }()
         case 124: try { try decoder.decodeSingularInt32Field(value: &_storage._agreeNum) }()
+        case 125: try { try decoder.decodeSingularMessageField(value: &_storage._topAgreePost) }()
         case 126: try { try decoder.decodeSingularMessageField(value: &_storage._agree) }()
         case 142: try { try decoder.decodeRepeatedMessageField(value: &_storage._firstPostContent) }()
         case 155: try { try decoder.decodeSingularMessageField(value: &_storage._forumInfo) }()
@@ -401,6 +413,9 @@ nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
       if _storage._agreeNum != 0 {
         try visitor.visitSingularInt32Field(value: _storage._agreeNum, fieldNumber: 124)
       }
+      try { if let v = _storage._topAgreePost {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 125)
+      } }()
       try { if let v = _storage._agree {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 126)
       } }()
@@ -446,6 +461,7 @@ nonisolated extension Tieba_ThreadInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
         if _storage._videoInfo != rhs_storage._videoInfo {return false}
         if _storage._alaInfo != rhs_storage._alaInfo {return false}
         if _storage._agreeNum != rhs_storage._agreeNum {return false}
+        if _storage._topAgreePost != rhs_storage._topAgreePost {return false}
         if _storage._agree != rhs_storage._agree {return false}
         if _storage._firstPostContent != rhs_storage._firstPostContent {return false}
         if _storage._forumInfo != rhs_storage._forumInfo {return false}

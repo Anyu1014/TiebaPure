@@ -54,13 +54,14 @@ import coil.compose.AsyncImage
 
 @Composable fun ContentBlocksView(blocks: List<Block>, vm: AppViewModel) {
     val normalized = remember(blocks) { blocks.flatMap(TiebaEmoticon::normalize) }
+    val singleImage = normalized.count { it.type in setOf(3, 20) } == 1
     var start = 0
     for (index in 0..normalized.size) {
         val media = index < normalized.size && normalized[index].type in setOf(3, 20, 5, 10)
         if (index == normalized.size || media) {
             if (index > start) NativeEmoticonText(normalized.subList(start, index), fontSize = vm.fontSize.sp,
                 fontFamily = vm.readerTypeface?.let(::FontFamily), onUser = { id, name -> if (id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", id, name)) })
-            if (media) ContentBlockView(normalized[index], vm)
+            if (media) ContentBlockView(normalized[index], vm, singleImage)
             start = index + 1
         }
     }

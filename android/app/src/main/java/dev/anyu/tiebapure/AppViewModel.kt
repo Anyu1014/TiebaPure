@@ -83,6 +83,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var darkMode by mutableStateOf(store.prefs.getString("theme", "system") ?: "system")
     var fontSize by mutableFloatStateOf(store.prefs.getFloat("font-size", 17f))
     var manualMedia by mutableStateOf(store.prefs.getBoolean("manual-media", false))
+    var originalImageRatio by mutableStateOf(store.prefs.getBoolean("original-image-ratio", true))
+        private set
+    fun selectOriginalImageRatio(value: Boolean) { originalImageRatio = value; store.prefs.edit().putBoolean("original-image-ratio", value).apply() }
     var bottomBarPosition by mutableStateOf(BottomBarPosition.stored(store.prefs.getString("bottom-bar-position", null))); private set
     var replyBarPosition by mutableStateOf(loadReplyBarPosition(store.prefs, bottomBarPosition)); private set
     var bottomBarShowsLabels by mutableStateOf(store.prefs.getBoolean("bottom-bar-labels", true)); private set

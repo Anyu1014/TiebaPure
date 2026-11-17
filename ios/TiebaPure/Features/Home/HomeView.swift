@@ -7,11 +7,14 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.readingPreferences) private var readingPreferences
+    @Environment(\.floatingRootTabSelection) private var rootSelection
     let account: Account?
+    @ObservedObject var unread: MessageUnreadState
     var refreshToken: Int = 0
 
     @ObservedObject private var blocklistStore = BlocklistStore.shared
     @State private var activeSearch: SearchRoute?
+    @State private var showsMessages = false
     @State private var threads: [ThreadSummary] = []
     @State private var page = 1
     @State private var hasMore = true
@@ -60,10 +63,11 @@ struct HomeView: View {
         .onChange(of: refreshToken) { _ in
             // Observe outside the feed's navigation destination so reselecting
             // Home also works while a detail or search view covers the list.
-            if navigationPath.isEmpty == false || activeSearch != nil
+            if navigationPath.isEmpty == false || activeSearch != nil || showsMessages
                 || splitDetailPath.isEmpty == false {
                 navigationPath = []
                 activeSearch = nil
+                showsMessages = false
                 splitDetailPath = []
                 return
             }
@@ -99,13 +103,24 @@ struct HomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if #available(iOS 26.0, *) {
+                if !unread.tabs(for: account).isEmpty {
+                    ToolbarItem(placement: .topBarLeading) { homeMessagesButton }
+                        .sharedBackgroundVisibility(.hidden)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     homeSearchButton
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
+                if !unread.tabs(for: account).isEmpty {
+                    ToolbarItem(placement: .topBarLeading) { homeMessagesButton }
+                }
                 ToolbarItem(placement: .topBarTrailing) { homeSearchButton }
             }
+        }
+        .navigationDestination(isPresented: $showsMessages) {
+            MessagesView(account: account, unread: unread)
+                .interactiveNavigationPopStateSync { showsMessages = false }
         }
         .navigationDestination(isPresented: searchIsActive) {
             if let activeSearch {
@@ -176,6 +191,10 @@ struct HomeView: View {
             guard didLoad == false else { return }
             await reload()
         }
+        .task(id: badgeRefreshSession) {
+            guard let account, badgeRefreshSession != nil else { return }
+            await unread.refreshWhileVisible(account: account, environment: environment)
+        }
         .onReceive(environment.threadCountersState.didChange) { change in
             guard change.session == account?.sessionIdentity else { return }
             threads = threads.map { change.counters.applying(to: $0) }
@@ -193,6 +212,7 @@ struct HomeView: View {
             paginationRequestScheduled = false
             errorMessage = nil
             navigationPath = []
+            showsMessages = false
             splitDetailPath = []
             Task { await reload() }
         }
@@ -222,6 +242,12 @@ struct HomeView: View {
 
     private var usesSplitDetailLayout: Bool {
         horizontalSizeClass == .regular
+    }
+
+    private var badgeRefreshSession: AccountSessionIdentity? {
+        guard scenePhase == .active, rootSelection?.wrappedValue == .home,
+              navigationPath.isEmpty, activeSearch == nil, !showsMessages else { return nil }
+        return account?.sessionIdentity
     }
 
     // Search presents in exactly one column per layout: the feed stack when
@@ -257,11 +283,13 @@ struct HomeView: View {
 
     private func openThread(
         _ thread: ThreadSummary,
-        initialDestination: ThreadDetailInitialDestination? = nil
+        initialDestination: ThreadDetailInitialDestination? = nil,
+        initialPostID: UInt64? = nil
     ) {
         let route = ReaderSplitThreadRoute(
             threadID: thread.id,
             forumID: thread.forumID,
+            initialPostID: initialPostID,
             initialDestination: initialDestination,
             mainPostFallback: ThreadMainPostFallback(thread: thread)
         )
@@ -392,6 +420,7 @@ struct HomeView: View {
                                 openThread(thread)
                             }
                         },
+                        onOpenHotComment: { post in openThread(thread, initialPostID: post.id > 0 ? post.id : nil) },
                         onOpenComments: {
                             openThread(
                                 thread,
@@ -449,6 +478,24 @@ struct HomeView: View {
                 if isPresented == false { likeActionError = nil }
             }
         )
+    }
+
+    private var homeMessagesButton: some View {
+        Button { showsMessages = true } label: {
+            Image(systemName: "bell.fill")
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .floatingGlass(in: Circle())
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(Color(uiColor: .systemRed)).frame(width: 8, height: 8)
+                        .padding(4)
+                        .accessibilityHidden(true)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("未读消息")
+        .accessibilityIdentifier("home-unread-messages")
     }
 
     private var homeSearchButton: some View {

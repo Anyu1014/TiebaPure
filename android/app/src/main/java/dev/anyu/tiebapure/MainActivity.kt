@@ -165,6 +165,7 @@ class MainActivity : ComponentActivity() {
     var confirmDelete by remember(vm.route) { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val r = vm.route
+    if (r.kind == "home") RefreshMessageBadges(vm)
     var listFilter by remember(r) { mutableStateOf("") }
     var readingFilter by remember(r) { mutableIntStateOf(0) }
     var managing by remember(r) { mutableStateOf(false) }
@@ -242,6 +243,8 @@ class MainActivity : ComponentActivity() {
         } } else null,
         onBack = { vm.back() },
         onSearch = openSearch,
+        onHomeTop = if (r.kind == "home") { { scope.launch { homeFeedState.animateScrollToItem(0) } } } else null,
+        onHomeMessages = if (r.kind == "home" && vm.hasUnreadMessages()) { { vm.navigate(Route("messages")) } } else null,
         onTab = { kind ->
             if (kind == "home" && r.kind == "home") { scope.launch { feedState.animateScrollToItem(0) }; vm.load(1) }
             else vm.navigate(Route(kind), root = true)
@@ -364,6 +367,7 @@ class MainActivity : ComponentActivity() {
                                 vm, thread, vm.fontSize, !vm.manualMedia, homeFeed = r.kind == "home", forumCategory = r.extra.takeIf { r.kind == "forum" },
                                 onForum = if (managing || thread.forum.isBlank()) null else { { vm.navigate(Route("forum", thread.forum)) } },
                                 onUser = if (managing) null else { { if (thread.author.id.toLongOrNull()?.let { it > 0 } == true) vm.navigate(Route("profile", thread.author.id, thread.author.name)) } },
+                                onHotComment = { comment -> vm.navigate(Route("thread", thread.id, thread.title, comment.id.takeIf { (it.toLongOrNull() ?: 0) > 0 }.orEmpty())) },
                                 onBlock = if (managing || thread.forum.isBlank()) null else { {
                                     runCatching {
                                         val key = java.security.MessageDigest.getInstance("SHA-256").digest(thread.forum.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -465,7 +469,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable fun ContentBlockView(block: Block, vm: AppViewModel) {
+@Composable fun ContentBlockView(block: Block, vm: AppViewModel, singleImage: Boolean = false) {
     val trustedUrl = Policy.mediaUrl(block.url)
     val context = LocalContext.current
     val local = remember(block.localFile) { OfflineLibrary.safeFile(context, block.localFile) }
@@ -478,9 +482,9 @@ class MainActivity : ComponentActivity() {
         trustedUrl != null && block.type in setOf(3, 20) -> {
             var ratio by remember(block.url, block.localFile) { mutableStateOf<Float?>(null) }
             if (!loaded) TextButton(onClick = { loaded = true }) { Text("加载图片") }
-            else AsyncImage(model = local ?: trustedUrl, contentDescription = "帖子图片，点击放大", contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+            else AsyncImage(model = local ?: trustedUrl, contentDescription = "帖子图片，点击放大", contentScale = if (vm.originalImageRatio && singleImage) androidx.compose.ui.layout.ContentScale.Crop else androidx.compose.ui.layout.ContentScale.FillWidth,
                 onSuccess = { state -> val image = state.result.drawable; if (image.intrinsicWidth > 0 && image.intrinsicHeight > 0) ratio = image.intrinsicWidth.toFloat() / image.intrinsicHeight },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).then(ratio?.let { Modifier.aspectRatio(it) } ?: Modifier.height(60.dp)).clip(androidx.compose.foundation.shape.RoundedCornerShape(IOSLayout.innerRadius)).clickable { preview = true })
+                modifier = Modifier.fillMaxWidth(if (vm.originalImageRatio && singleImage) originalImageWidthFraction(ratio ?: 1f) else 1f).padding(vertical = 8.dp).then(if (vm.originalImageRatio && singleImage) Modifier.aspectRatio(originalImageRatio(ratio ?: 1f)) else ratio?.let { Modifier.aspectRatio(it) } ?: Modifier.height(60.dp)).clip(androidx.compose.foundation.shape.RoundedCornerShape(IOSLayout.innerRadius)).clickable { preview = true })
             if (preview) androidx.compose.ui.window.Dialog(onDismissRequest = { preview = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
                 FrostedImagePreview(local ?: trustedUrl, onClose = { preview = false }, onSave = { (context as? MainActivity)?.saveMedia(block) })
             }

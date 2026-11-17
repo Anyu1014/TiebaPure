@@ -1,5 +1,14 @@
 import SwiftUI
 
+private struct PrivateMessageFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue(), uniquingKeysWith: { _, new in new }) }
+}
+private struct PrivateViewportHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct PrivateMessagesView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var environment: AppEnvironment
@@ -12,8 +21,8 @@ struct PrivateMessagesView: View {
     @State private var revision = 0
     @State private var generation = 0
     @State private var loading = false
-    @State private var sending = false
-    @State private var uncertain = false
+    @State private var sendsInFlight = 0
+    private var sending: Bool { sendsInFlight > 0 }
     @State private var error: String?
     @State private var draft = ""
     @State private var cursor: Int64?
@@ -26,6 +35,15 @@ struct PrivateMessagesView: View {
     @State private var active = true
     @State private var showsEmoticons = false
     @State private var mediaAspects: [String: CGFloat] = [:]
+    @State private var previousPosition: PrivateReadingPosition?
+    @State private var currentAnchor: String?
+    @State private var chatAtBottom = false
+    @State private var chatInitialized = false
+    @State private var displayedLastID: String?
+    @State private var viewportHeight: CGFloat = 0
+    @State private var showReadingJump = false
+    @State private var readingPromptHandled = false
+    @State private var userNavigated = false
 
     init(account: Account, recipient: UserSummary? = nil, onUnreadChange: @escaping (Bool) -> Void = { _ in }) {
         self.account = account
@@ -93,7 +111,8 @@ struct PrivateMessagesView: View {
         .accessibilityIdentifier("private-messages-screen")
         .preference(key: PrivateMessagesTabPreferenceKey.self, value: true)
         .task(id: "\(selected?.id ?? "list"):\(revision)") {
-            guard (try? await environment.accountStore.load())?.sessionIdentity == account.sessionIdentity, !Task.isCancelled else { active = false; return }
+            let storedAccount = (try? await environment.accountStore.load()) ?? nil
+            guard storedAccount?.uid == account.uid, !Task.isCancelled else { active = false; return }
             active = true; await reload()
         }
         .task {
@@ -103,9 +122,10 @@ struct PrivateMessagesView: View {
             }
         }
         .onReceive(environment.accountStore.accountDidChange) { current in
-            if current?.sessionIdentity != account.sessionIdentity { active = false; generation += 1; action?.cancel(); draft = ""; messages = []; conversations = [] }
+            if current?.uid != account.uid { active = false; generation += 1; action?.cancel(); draft = ""; messages = []; conversations = [] }
         }
-        .onDisappear { active = false; generation += 1; action?.cancel(); sending = false; loading = false }
+        .onChange(of: scenePhase) { if $0 != .active { saveReadingPosition() } }
+        .onDisappear { saveReadingPosition(); active = false; generation += 1; action?.cancel(); sendsInFlight = 0; loading = false }
         .sheet(isPresented: $newMessage, onDismiss: { action?.cancel(); resolving = false }) {
             NavigationStack {
                 Form {
@@ -136,7 +156,11 @@ struct PrivateMessagesView: View {
         }
     }
     private func chat(_ peer: PrivateConversation) -> some View {
-        VStack(spacing: 0) {
+        let ids = messages.map(\.id)
+        let boundary = PrivateReadingPolicy.boundary(previousPosition, ids: ids)
+        let jumpTarget = PrivateReadingPolicy.target(previousPosition, ids: ids)
+        let needsHistory = PrivateReadingPolicy.needsHistory(previousPosition, ids: ids, hasMore: hasMore)
+        return VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 14) {
@@ -145,6 +169,9 @@ struct PrivateMessagesView: View {
                         ForEach(messages) { message in
                             let mine = message.senderID == account.uid
                             let edgeGap: CGFloat = showsBubbleChrome(message) ? 48 : 0
+                            if let boundary, messages[boundary].id == message.id {
+                                Text("以下是新消息").font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.vertical, 4)
+                            }
                             HStack(spacing: 0) {
                                 if mine { Spacer(minLength: edgeGap) }
                                 VStack(alignment: mine ? .trailing : .leading, spacing: 5) {
@@ -155,11 +182,59 @@ struct PrivateMessagesView: View {
                                     if message.timestamp > 0 { Text(Date(timeIntervalSince1970: Double(message.timestamp)), format: .dateTime.month().day().hour().minute()).font(.caption2).foregroundStyle(.secondary) }
                                 }
                                 if !mine { Spacer(minLength: edgeGap) }
-                            }.id(message.id)
+                            }.background(GeometryReader { geometry in
+                                Color.clear.preference(key: PrivateMessageFramesKey.self, value: [message.id: geometry.frame(in: .named("private-chat-scroll"))])
+                            }).id(message.id)
                         }
-                    }.padding()
+                        Color.clear.frame(height: 1).id("private-chat-bottom")
+                    }.padding().frame(minHeight: viewportHeight, alignment: .bottom)
                 }
-                .onChange(of: messages.last?.id) { value in if let value, !loading { withAnimation { proxy.scrollTo(value, anchor: .bottom) } } }
+                .coordinateSpace(name: "private-chat-scroll")
+                .modifier(BottomAnchoredScroll())
+                .opacity(chatInitialized || messages.isEmpty ? 1 : 0)
+                .background(GeometryReader { geometry in Color.clear.preference(key: PrivateViewportHeightKey.self, value: geometry.size.height) })
+                .onPreferenceChange(PrivateViewportHeightKey.self) { viewportHeight = $0; updateChatScroll(proxy) }
+                .onPreferenceChange(PrivateMessageFramesKey.self) { frames in
+                    guard chatInitialized, viewportHeight > 0 else { return }
+                    if let anchor = messages.first(where: { message in
+                        guard let frame = frames[message.id] else { return false }
+                        return frame.maxY > 0 && frame.minY < viewportHeight
+                    })?.id { currentAnchor = anchor }
+                    if let last = messages.last, let frame = frames[last.id] {
+                        chatAtBottom = frame.maxY > 0 && frame.maxY <= viewportHeight + 2
+                    } else { chatAtBottom = false }
+                    if !userNavigated && !chatAtBottom && !loading { positionChatAtBottom(proxy) }
+                }
+                .overlay(alignment: .bottom) {
+                    if showReadingJump, let jumpTarget {
+                        Button(previousPosition?.atBottom == true ? "跳转到上次未读" : "回到上次阅读位置") {
+                            userNavigated = true
+                            withAnimation { proxy.scrollTo(jumpTarget, anchor: .top) }
+                            showReadingJump = false
+                        }
+                        .buttonStyle(.borderedProminent).padding(.bottom, 12)
+                        .accessibilityIdentifier("private-reading-jump")
+                    }
+                }
+                .onAppear {
+                    previousPosition = UserDefaults.standard.data(forKey: readingKey(peer)).flatMap { try? JSONDecoder().decode(PrivateReadingPosition.self, from: $0) }
+                    updateChatScroll(proxy)
+                }
+                .onChange(of: messages.last?.id) { _ in updateChatScroll(proxy) }
+                .onChange(of: loading) { _ in updateChatScroll(proxy) }
+                .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in userNavigated = true })
+                .task(id: "\(peer.id):\(chatInitialized):\(needsHistory):\(loading):\(messages.first?.id ?? "")") {
+                    if chatInitialized && needsHistory && !loading { loadMore() }
+                }
+                .task(id: "\(peer.id):\(chatInitialized):\(needsHistory):\(jumpTarget ?? "")") {
+                    guard chatInitialized, !needsHistory, jumpTarget != nil, !readingPromptHandled else { return }
+                    readingPromptHandled = true; showReadingJump = true
+                }
+                .task(id: showReadingJump) {
+                    guard showReadingJump else { return }
+                    do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                    showReadingJump = false
+                }
             }
             VStack(spacing: 8) {
                 HStack(alignment: .center, spacing: 4) {
@@ -168,11 +243,10 @@ struct PrivateMessagesView: View {
                         .padding(.horizontal, 12).padding(.vertical, 10).frame(minHeight: 44)
                         .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 20))
                         .accessibilityIdentifier("private-message-input")
-                        .disabled(sending)
-                    Button { showsEmoticons.toggle() } label: { Image(systemName: "face.smiling").font(.system(size: 21)).frame(width: 44, height: 44) }.accessibilityLabel("贴吧表情").disabled(sending)
-                    Button(sending ? "发送中" : "发送") { send(peer) }
+                    Button { showsEmoticons.toggle() } label: { Image(systemName: "face.smiling").font(.system(size: 21)).frame(width: 44, height: 44) }.accessibilityLabel("贴吧表情")
+                    Button("发送") { send(peer) }
                         .frame(minWidth: 44, minHeight: 44)
-                        .disabled(sending || uncertain || loading || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 5_000)
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft.count > 5_000)
                         .accessibilityLabel("发送私信")
                 }
                 if showsEmoticons {
@@ -188,6 +262,42 @@ struct PrivateMessagesView: View {
                     }.frame(height: 48)
                 }
             }.padding(.horizontal).padding(.vertical, 8).background(.regularMaterial)
+        }
+    }
+    private func readingKey(_ peer: PrivateConversation) -> String { "private-reading-position.\(account.uid).\(peer.userID)" }
+    private func saveReadingPosition() {
+        guard chatInitialized, let peer = selected, let anchor = currentAnchor, let latest = messages.last?.id else { return }
+        let position = PrivateReadingPosition(anchor: anchor, latest: latest, atBottom: chatAtBottom)
+        if let data = try? JSONEncoder().encode(position) { UserDefaults.standard.set(data, forKey: readingKey(peer)) }
+    }
+    private func updateChatScroll(_ proxy: ScrollViewProxy) {
+        guard let last = messages.last else { return }
+        if !chatInitialized {
+            displayedLastID = last.id
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { proxy.scrollTo("private-chat-bottom", anchor: .bottom) }
+            chatInitialized = true
+            positionChatAtBottom(proxy)
+            return
+        }
+        if displayedLastID != last.id {
+            let shouldFollow = chatAtBottom || last.senderID == account.uid
+            displayedLastID = last.id
+            if shouldFollow { DispatchQueue.main.async { withAnimation { proxy.scrollTo("private-chat-bottom", anchor: .bottom) } } }
+        } else if !userNavigated {
+            positionChatAtBottom(proxy)
+        }
+    }
+    private func positionChatAtBottom(_ proxy: ScrollViewProxy) {
+        let peerID = selected?.id
+        let requestGeneration = generation
+        for delay in [0.0, 0.1, 0.3] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard active, selected?.id == peerID, generation == requestGeneration, !userNavigated else { return }
+                var transaction = Transaction(animation: nil); transaction.disablesAnimations = true
+                withTransaction(transaction) { proxy.scrollTo("private-chat-bottom", anchor: .bottom) }
+            }
         }
     }
     @ViewBuilder private func bubbleBody(_ message: PrivateChatMessage, mine: Bool) -> some View {
@@ -250,7 +360,12 @@ struct PrivateMessagesView: View {
     @MainActor private func reload() async {
         guard active else { return }
         let targetID = selected?.id, requestRevision = revision, requestGeneration = generation
-        loading = true; error = nil; hasMore = false; cursor = nil
+        if let peer = selected, let page = try? client.cachedMessages(peer, account: account) {
+            applyChatPage(page)
+        } else if selected == nil, let page = try? client.cachedConversations(account: account) {
+            conversations = page.items; hasMore = page.hasMore; cursor = page.cursor
+        }
+        loading = true; error = nil
         defer { if active && generation == requestGeneration && selected?.id == targetID && revision == requestRevision { loading = false } }
         do {
             if let peer = selected {
@@ -259,8 +374,7 @@ struct PrivateMessagesView: View {
                 if let hasUnread = try? client.hasCachedUnread(account: account) {
                     onUnreadChange(hasUnread)
                 }
-                messages = page.items; hasMore = page.hasMore; cursor = page.cursor
-                if uncertain { error = PrivateMessageError.unknownSend.localizedDescription }
+                applyChatPage(page)
             } else {
                 let page = try await client.conversations(account: account)
                 try Task.checkCancellation(); guard active, generation == requestGeneration, selected == nil else { return }
@@ -277,6 +391,12 @@ struct PrivateMessagesView: View {
                 }
             }
         } catch { if active && generation == requestGeneration && !Task.isCancelled { self.error = error.localizedDescription } }
+    }
+    private func applyChatPage(_ page: PrivateMessagePage<PrivateChatMessage>) {
+        let ids = Set(page.items.map(\.id))
+        let older = Array(messages.prefix { !ids.contains($0.id) })
+        messages = older + page.items
+        if older.isEmpty { hasMore = page.hasMore; cursor = page.cursor }
     }
     private func loadMore() {
         guard let before = cursor, !loading, !sending else { return }
@@ -317,32 +437,43 @@ struct PrivateMessagesView: View {
         newMessage = false
     }
     private func switchConversation(_ peer: PrivateConversation?) {
+        saveReadingPosition()
         action?.cancel(); generation += 1
         showsEmoticons = false
-        selected = peer; messages = []; draft = ""; uncertain = false; error = nil
-        cursor = nil; hasMore = false; loading = false; sending = false
+        previousPosition = nil; currentAnchor = nil; chatAtBottom = false; chatInitialized = false
+        displayedLastID = nil; showReadingJump = false; readingPromptHandled = false; viewportHeight = 0; userNavigated = false
+        selected = peer; messages = []; draft = ""; error = nil
+        cursor = nil; hasMore = false; loading = false; sendsInFlight = 0
     }
     private func send(_ peer: PrivateConversation) {
-        guard !sending, !uncertain, active else { return }
-        sending = true; error = nil
+        guard active, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        sendsInFlight += 1; error = nil
         let text = draft, requestGeneration = generation
-        action = Task { @MainActor in
-            defer { if active && generation == requestGeneration { sending = false } }
+        draft = ""
+        Task { @MainActor in
+            defer { if active && generation == requestGeneration { sendsInFlight = max(0, sendsInFlight - 1) } }
             do {
-                guard try await environment.accountStore.load()?.sessionIdentity == account.sessionIdentity else { throw CancellationError() }
+                let stored = try await environment.accountStore.load()
+                guard let stored, stored.uid == account.uid else { throw PrivateMessageError.invalidUser }
+
                 try Task.checkCancellation(); guard active else { return }
                 let key = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10).lowercased()
-                _ = try await client.send(text, to: peer, account: account, key: key)
+                _ = try await client.send(text, to: peer, account: stored, key: key)
                 try Task.checkCancellation(); guard active, generation == requestGeneration, selected?.id == peer.id else { return }
-                draft = ""
-                revision += 1
+                if let page = try? client.cachedMessages(peer, account: account) { messages = page.items }
             } catch {
                 if active && generation == requestGeneration && selected?.id == peer.id && !Task.isCancelled {
-                    if case PrivateMessageError.unknownSend = error { uncertain = true } else { uncertain = false }
+                    if draft.isEmpty { draft = text }
                     self.error = error.localizedDescription
                 }
             }
         }
     }
 
+}
+
+private struct BottomAnchoredScroll: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) { content.defaultScrollAnchor(.bottom) } else { content }
+    }
 }

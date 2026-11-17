@@ -325,7 +325,7 @@ private struct MainTabView: View {
     private var modernTabView: some View {
         TabView(selection: tabSelection) {
             Tab(value: RootTab.home) {
-                HomeView(account: account, refreshToken: homeRefreshToken)
+                HomeView(account: account, unread: environment.messageUnread, refreshToken: homeRefreshToken)
             } label: {
                 NativeRootTabLabel(title: "首页", symbol: "house", showsLabels: appearance.bottomBarShowsLabels)
             }
@@ -346,7 +346,7 @@ private struct MainTabView: View {
 
     private var legacyTabView: some View {
         TabView(selection: tabSelection) {
-            HomeView(account: account, refreshToken: homeRefreshToken)
+            HomeView(account: account, unread: environment.messageUnread, refreshToken: homeRefreshToken)
                 .tabItem {
                     Label("首页", systemImage: "house")
                 }

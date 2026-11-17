@@ -509,6 +509,19 @@ final class CrossVersionStateRegressionTests: XCTestCase,
     }
 
     @MainActor
+    func testOriginalImageRatioDefaultsOnAndPreservesExplicitOff() throws {
+        let defaults = try makeScratchDefaults()
+        let store = ReadingPreferencesStore(defaults: defaults)
+        XCTAssertTrue(store.preferences.originalImageRatio)
+        var preferences = store.preferences
+        preferences.originalImageRatio = false
+        store.update(preferences)
+        XCTAssertFalse(ReadingPreferencesStore(defaults: defaults).preferences.originalImageRatio)
+        store.reset()
+        XCTAssertTrue(ReadingPreferencesStore(defaults: defaults).preferences.originalImageRatio)
+    }
+
+    @MainActor
     func testReadingPreferencesResetRemovesEveryOverride() throws {
         let defaults = try makeScratchDefaults()
         let keys = ReadingPreferencesStore.StorageKeys(

@@ -1,6 +1,29 @@
 import Foundation
 
 enum ThreadMapper {
+    static func homeThreads(from data: Tieba_PersonalizedResponseData) -> [ThreadSummary] {
+        var exposed: [Int64: Post] = [:]
+        for layout in data.pageData.feedList where layout.hasFeed {
+            let feed = layout.feed
+            guard let rawID = feed.businessInfo.first(where: { $0.key == "thread_id" })?.value,
+                  let threadID = Int64(rawID), threadID > 0 else { continue }
+            guard let component = feed.components.first(where: { $0.hasFeedPostexpose })
+                    ?? feed.componentsNewStyle.first(where: { $0.hasFeedPostexpose }) else { continue }
+            let selected = component.feedPostexpose
+            let info = Dictionary(selected.businessInfo.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
+            if let selectedThread = info["thread_id"], selectedThread != rawID { continue }
+            let postID = info["reply_id"].flatMap(UInt64.init).flatMap { $0 <= UInt64(Int64.max) ? $0 : nil } ?? 0
+            let name = selected.headText.isEmpty ? "贴吧用户" : selected.headText
+            let author = UserSummary(id: 0, name: name, displayName: name, portrait: selected.headImg.imgURL)
+            let text = selected.floor.map { $0.textInfo.text }.joined()
+            exposed[threadID] = Post(id: postID, threadID: threadID, floor: 0, author: author, ipAddress: nil, createdAt: nil, blocks: [.text(text)], subpostCount: 0, likeCount: max(Int(selected.headAgree.agreeNum), 0), previewSubposts: [])
+        }
+        return data.threadList.filter(TiebaContentFilter.shouldMap(thread:)).map { raw in
+            var thread = fromThreadInfo(raw, usersByID: [:])
+            thread.hotComment = exposed[thread.id] ?? thread.hotComment
+            return thread
+        }
+    }
     static func fromThreadInfo(_ proto: Tieba_ThreadInfo, usersByID: [Int64: Tieba_User]) -> ThreadSummary {
         let author = UserMapper.fromUser(
             proto.hasAuthor ? proto.author : Tieba_User(),
@@ -43,7 +66,8 @@ enum ThreadMapper {
             blocks: blocks,
             isTop: proto.isTop != 0,
             isGood: proto.isGood != 0,
-            hasVideo: proto.hasVideoInfo || containsVideo(in: blocks)
+            hasVideo: proto.hasVideoInfo || containsVideo(in: blocks),
+            hotComment: proto.hasTopAgreePost ? PostMapper.post(from: proto.topAgreePost, usersByID: usersByID, threadID: proto.id == 0 ? proto.threadID : proto.id) : nil
         )
     }
 

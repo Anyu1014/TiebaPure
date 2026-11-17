@@ -1,6 +1,6 @@
 // Generated from ../app-config.json by tool/tiebapure/sync-config.mjs
 APP_DISPLAY_NAME = TiebaPure
 APP_IDENTIFIER = dev.anyu.tiebapure
-APP_VERSION = 2.4
-APP_BUILD = 89
+APP_VERSION = 2.5
+APP_BUILD = 92
 APP_URL_SCHEME = tiebapure

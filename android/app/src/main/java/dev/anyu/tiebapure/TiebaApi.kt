@@ -40,6 +40,7 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         OfficialPrivateTransport.session(account, clientId) { transport -> dev.anyu.tiebapure.official.OfficialIM.CommitResponse.parseFrom(transport.request(205001,request.toByteArray())) }
     }
     private val privateLock = kotlinx.coroutines.sync.Mutex()
+    private var lastPrivateRecord = 0L
     private val privateInboxes = mutableMapOf<String,OfficialPrivateInbox>()
     private fun inbox(a: Account): OfficialPrivateInbox {
         Policy.signedId(a.uid)
@@ -114,12 +115,12 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         val request = Request.Builder().url(url).post(body).header("User-Agent", if (url.startsWith(social)) "tieba/22.5.1.0" else ua).apply { if (cookie != null) header("Cookie", cookie); headers.forEach { (k, v) -> header(k, v) } }.build()
         return JSONObject(bytes(request, maximumBytes, allowedContentTypes).toString(Charsets.UTF_8))
     }
-    private suspend fun protobuf(url: String, message: MessageLite, account: Account?, includeToken: Boolean): ByteArray {
+    private suspend fun protobuf(url: String, message: MessageLite, account: Account?, includeToken: Boolean, userAgent: String = ua): ByteArray {
         val body = MultipartBody.Builder("--------7da3d81520810*").setType(MultipartBody.FORM).apply {
             if (includeToken && account != null) addFormDataPart("stoken", account.stoken)
             addFormDataPart("data", "file", message.toByteArray().toRequestBody("application/octet-stream".toMediaType()))
         }.build()
-        return bytes(Request.Builder().url(url).post(body).header("X-BD-DATA-TYPE", "protobuf").header("Cookie", "ka=open").header("User-Agent", ua).build())
+        return bytes(Request.Builder().url(url).post(body).header("X-BD-DATA-TYPE", "protobuf").header("Cookie", "ka=open").header("User-Agent", userAgent).build())
     }
     private fun validate(code: Int, message: String) { check(code == 0) { message.take(240).ifBlank { "贴吧接口错误 $code" } } }
     private fun validate(j: JSONObject, requireCode: Boolean = false) {
@@ -130,7 +131,7 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         j.optJSONObject("error")?.let { validate(it.optInt("errno", 0), it.optString("errmsg")) }
     }
     private fun user(u: UserProto.User) = User(u.id.toString(), u.nameShow.ifBlank { u.name }.ifBlank { "贴吧用户" }, u.portrait.ifBlank { u.portraith })
-    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), TiebaEmoticon.summary(t.getAbstractList().flatMap { TiebaEmoticon.normalize(Block(it.type, it.text, it.src)) }), t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9), likes = (if (t.hasAgree()) t.agree.agreeNum else t.agreeNum.toLong()).coerceAtLeast(0), forumAvatar = t.forumInfo.avatar, timestamp = t.lastTimeInt.toLong().takeIf { it > 0 } ?: t.createTime.toLong(), collected = t.collectStatus == 1, isTop = t.isTop != 0)
+    private fun thread(t: ThreadInfo): Thread = Thread((if (t.id != 0L) t.id else t.threadId).toString(), t.title, t.forumName.ifBlank { t.forumInfo.name }, user(t.author), TiebaEmoticon.summary(t.getAbstractList().flatMap { TiebaEmoticon.normalize(Block(it.type, it.text, it.src)) }), t.replyNum, t.mediaList.mapNotNull { Policy.mediaUrl(it.srcPic.ifBlank { it.bigPic }.replaceFirst("http://", "https://")) }.take(9), likes = (if (t.hasAgree()) t.agree.agreeNum else t.agreeNum.toLong()).coerceAtLeast(0), forumAvatar = t.forumInfo.avatar, timestamp = t.lastTimeInt.toLong().takeIf { it > 0 } ?: t.createTime.toLong(), collected = t.collectStatus == 1, isTop = t.isTop != 0, hotComment = if (t.hasTopAgreePost()) post(t.topAgreePost) else null)
     internal fun content(list: List<PbContent>): List<Block> {
         val hasImages = list.any { it.type in setOf(3, 20) && listOf(it.originSrc, it.bigCdnSrc, it.cdnSrc, it.bigSrc, it.src).any { src -> Policy.mediaUrl(src.replaceFirst("http://", "https://")) != null } }
         return list.flatMap { b ->
@@ -170,6 +171,8 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
         currentCoroutineContext().ensureActive()
         inbox(a).markAllRead()
     }
+    internal suspend fun cachedPrivateConversations(a: Account): PrivateMessagePage<PrivateConversation> = privateLock.withLock { inbox(a).conversations() }
+    internal suspend fun cachedPrivateMessages(a: Account, peer: PrivateConversation): PrivateMessagePage<PrivateChatMessage> = privateLock.withLock { inbox(a).messages(peer.userId, null) }
     internal suspend fun cachedPrivateUnread(a: Account): Boolean = privateLock.withLock {
         inbox(a).conversations().items.any { it.unread > 0 }
     }
@@ -181,27 +184,53 @@ class TiebaApi(private val clientId: String, private val screenWidth: Int = 1080
     internal suspend fun sendPrivateMessage(a: Account, peer: PrivateConversation, text: String, key: String): String = privateLock.withLock {
         PrivateMessageContent.validate(text)
         Policy.signedId(peer.userId); require(peer.userId != a.uid)
-        val record = System.currentTimeMillis()
+        val record = maxOf(System.currentTimeMillis(), lastPrivateRecord + 1).also { lastPrivateRecord = it }
         val request = dev.anyu.tiebapure.official.OfficialIM.CommitRequest.newBuilder().setData(dev.anyu.tiebapure.official.OfficialIM.CommitData.newBuilder().setToUid(peer.userId.toLong()).setToUserType(0).setMsgType(1).setContent(text).setRecordId(record)).build()
+        val inbox = inbox(a)
         val response = try { officialSend(a,request) }
         catch(e: PrivateMessageRejected) { throw e }
         catch(e: kotlinx.coroutines.CancellationException) { throw e }
-        catch(_: Exception) { throw PrivateSendUnknown() }
-        if(!response.hasError()) throw PrivateSendUnknown()
-        if(response.error.code != 0) throw PrivateMessageRejected(response.error.code.toLong())
-        val receipt = response.data
-        if(receipt.id <= 0 || receipt.toUid.toString() != peer.userId || receipt.recordId != record) throw PrivateSendUnknown()
-        try { inbox(a).sent(peer,a,text,receipt,1) } catch(_: Exception) { throw PrivateSendUnknown() }
+        catch(e: Exception) { throw PrivateSendUnknown(e.message ?: e.javaClass.simpleName) }
+        if(response.hasError() && response.error.code != 0) throw PrivateMessageRejected(response.error.code.toLong(), response.error.message)
+        // 官方在部分场景只回 { error: { code: 0, message: "成功" } } 而不带 data，
+        // 这时没有 msg id 可核对，用本地 record 补齐，避免把成功当失败。
+        val sent = response.data
+        if(!response.hasError() && sent.id <= 0) throw PrivateSendUnknown("官方未返回可识别的发送结果")
+        if(sent.hasToUid() && sent.toUid.toString() != peer.userId) throw PrivateSendUnknown("回执用户不一致（toUid=${sent.toUid}）")
+        if(sent.hasRecordId() && sent.recordId != record) throw PrivateSendUnknown("回执记录不一致（record=${sent.recordId}，want=$record）")
+        val receipt = if(sent.id > 0) sent else sent.toBuilder().setId(record).setToUid(peer.userId.toLong()).setRecordId(record).build()
+        try { inbox.sent(peer,a,text,receipt,1) } catch(_: Exception) { throw PrivateSendUnknown() }
         receipt.id.toString()
     }
 
     suspend fun home(account: Account?, page: Int): List<Thread> {
         require(page > 0)
-        val data = PersonalizedRequestData.newBuilder().setCommon(common(account)).setLoadType(if (page == 1) 1 else 2).setPn(page).setPageThreadCount(11).setQType(1).setNewNetType(1).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
-        val response = PersonalizedResponse.parseFrom(protobuf("$base/c/f/excellent/personalized?cmd=309264", PersonalizedRequest.newBuilder().setData(data).build(), account, false))
+        val homeCommon = common(account).toBuilder().setClientVersion("22.13.1.1").setUserAgent("tieba/22.13.1.1").build()
+        val data = PersonalizedRequestData.newBuilder().setCommon(homeCommon).setLoadType(if (page == 1) 1 else 2).setPn(page).setPageThreadCount(11).setQType(2).setNewNetType(1).setIsNewfeed(1).setCacheColumnStyle(1).setScrW(screenWidth).setScrH(screenHeight).setScrDip(screenScale)
+        val response = PersonalizedResponse.parseFrom(protobuf("$base/c/f/excellent/personalized?cmd=309264", PersonalizedRequest.newBuilder().setData(data).build(), account, false, "bdtb for Android 22.13.1.1"))
         validate(response.error.errorCode, response.error.userMsg.ifBlank { response.error.errorMsg })
         check(response.hasData()) { "未返回首页内容" }
-        return response.data.threadListList.filter { it.isDeleted == 0 && !it.hasAlaInfo() && !it.hasTwzhiboInfo() }.map(::thread).filter { it.id != "0" }
+        val exposed = response.data.pageData.feedListList.mapNotNull { layout ->
+            if (!layout.hasFeed()) return@mapNotNull null
+            val feed = layout.feed
+            val threadId = feed.businessInfoList.firstOrNull { it.key == "thread_id" }?.value?.toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+            val selected = (feed.componentsList.firstOrNull { it.hasFeedPostexpose() }
+                ?: feed.componentsNewStyleList.firstOrNull { it.hasFeedPostexpose() })?.feedPostexpose ?: return@mapNotNull null
+            val selectedThread = selected.businessInfoList.firstOrNull { it.key == "thread_id" }?.value
+            if (selectedThread != null && selectedThread != threadId.toString()) return@mapNotNull null
+            val postId = selected.businessInfoList.firstOrNull { it.key == "reply_id" }?.value?.toLongOrNull()?.takeIf { it > 0 }?.toString() ?: ""
+            val author = User(name = selected.headText.ifBlank { "贴吧用户" }, portrait = selected.headImg.imgUrl)
+            val text = selected.floorList.joinToString("") { it.textInfo.text }
+            threadId to Post(postId, 0, author, listOf(Block(0, text)), likes = if (selected.hasHeadAgree()) selected.headAgree.agreeNum.coerceAtLeast(0) else null)
+        }.toMap()
+        return response.data.threadListList.filter { it.isDeleted == 0 && !it.hasAlaInfo() && !it.hasTwzhiboInfo() }.map { item ->
+            val originals = item.mediaList.mapNotNull { media ->
+                val thumbnail = Policy.mediaUrl(media.srcPic.ifBlank { media.bigPic }.replaceFirst("http://", "https://")) ?: return@mapNotNull null
+                listOf(media.originPic, media.bigPic).firstNotNullOfOrNull { Policy.mediaUrl(it.replaceFirst("http://", "https://")) } ?: thumbnail
+            }.take(9)
+            val mapped = thread(item)
+            mapped.copy(previewOriginals = originals, hotComment = exposed[mapped.id.toLongOrNull()] ?: mapped.hotComment)
+        }.filter { it.id != "0" }
     }
     private suspend fun forumResponse(name: String, page: Int, sort: Int, good: Boolean): JSONObject {
         require(name.isNotBlank() && name.length <= 100 && page > 0)

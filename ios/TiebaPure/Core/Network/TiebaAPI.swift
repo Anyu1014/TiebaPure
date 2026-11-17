@@ -320,6 +320,10 @@ extension TiebaAPI {
         var requestData = Tieba_PersonalizedRequestData()
         requestData.appPos = Tieba_AppPosInfo()
         requestData.common = requestBuilder.common(account: account)
+        requestData.common.clientVersion = "22.13.1.1"
+        requestData.common.userAgent = "tieba/22.13.1.1"
+        requestData.isNewfeed = 1
+        requestData.cacheColumnStyle = 1
         requestData.loadType = UInt32(loadType)
         requestData.pn = requestPage
         requestData.needTags = 0
@@ -327,7 +331,7 @@ extension TiebaAPI {
         requestData.preAdThreadCount = 0
         requestData.sugCount = 0
         requestData.tagCode = 0
-        requestData.qType = 1
+        requestData.qType = 2
         requestData.needForumlist = 0
         requestData.newNetType = 1
         requestData.newInstall = 0
@@ -347,7 +351,8 @@ extension TiebaAPI {
             contentType: multipart.contentType,
             headers: [
                 "X-BD-DATA-TYPE": "protobuf",
-                "Cookie": "ka=open"
+                "Cookie": "ka=open",
+                "User-Agent": "bdtb for Android 22.13.1.1"
             ],
             as: Tieba_PersonalizedResponse.self
         )
@@ -355,9 +360,7 @@ extension TiebaAPI {
         try validateTiebaError(response.error)
         guard response.hasData else { throw TiebaAPIError.emptyResponse }
 
-        return response.data.threadList
-            .filter(TiebaContentFilter.shouldMap(thread:))
-            .map { ThreadMapper.fromThreadInfo($0, usersByID: [:]) }
+        return ThreadMapper.homeThreads(from: response.data)
     }
 
     func followedForums(account: Account) async throws -> [Forum] {

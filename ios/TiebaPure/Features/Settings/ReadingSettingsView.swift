@@ -120,6 +120,10 @@ struct ReadingSettingsView: View {
             }
 
             Section {
+                Toggle("图片原比例显示", isOn: Binding(
+                    get: { store.preferences.originalImageRatio },
+                    set: { value in var updated = store.preferences; updated.originalImageRatio = value; store.update(updated) }
+                )).accessibilityIdentifier("reading-original-image-ratio")
                 Picker("媒体加载", selection: mediaLoadingSelection) {
                     ForEach(ReaderMediaLoadingPolicy.allCases) { policy in
                         VStack(alignment: .leading, spacing: TiebaPureTheme.Spacing.xxs) {

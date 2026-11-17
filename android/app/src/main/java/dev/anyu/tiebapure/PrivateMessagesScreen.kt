@@ -16,6 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -160,9 +162,9 @@ import java.util.UUID
     var revision by remember { mutableIntStateOf(0) }
     var generation by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
-    var sending by remember { mutableStateOf(false) }
+    var sendsInFlight by remember { mutableIntStateOf(0) }
+    val sending = sendsInFlight > 0
     var markingRead by remember { mutableStateOf(false) }
-    var uncertain by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var cursor by remember { mutableStateOf<Long?>(null) }
@@ -186,23 +188,37 @@ import java.util.UUID
         if (!current()) return
         action?.cancel(); generation++
         selected = PrivateConversation.recipient(user, account.uid)
-        messages = emptyList(); draft = ""; uncertain = false; error = null; newMessage = false; chooseFollowing = false
+        messages = emptyList(); draft = ""; error = null; newMessage = false; chooseFollowing = false
     }
     DisposableEffect(Unit) { onDispose { active = false; action?.cancel() } }
-    fun backToList() { action?.cancel(); generation++; sending = false; selected = null; messages = emptyList(); draft = ""; uncertain = false; error = null }
+    fun backToList() { action?.cancel(); generation++; sendsInFlight = 0; selected = null; messages = emptyList(); draft = ""; error = null }
+    fun applyChatPage(page: PrivateMessagePage<PrivateChatMessage>) {
+        val ids = page.items.mapTo(HashSet()) { it.id }
+        val older = messages.takeWhile { it.id !in ids }
+        messages = older + page.items
+        if (older.isEmpty()) { hasMore = page.hasMore; cursor = page.cursor }
+    }
     BackHandler(enabled = selected != null) { backToList() }
     LaunchedEffect(selected?.id, revision) {
         val requestGeneration = ++generation
         if (selected == null) messages = emptyList()
-        loading = true; error = null; cursor = null; hasMore = false
+        loading = true; error = null
         try {
+            val cachedPeer = selected
+            if (cachedPeer == null) {
+                val page = vm.api.cachedPrivateConversations(account)
+                if (current() && generation == requestGeneration) { conversations = page.items; hasMore = page.hasMore; cursor = page.cursor }
+            } else {
+                val page = vm.api.cachedPrivateMessages(account, cachedPeer)
+                if (current() && generation == requestGeneration) applyChatPage(page)
+            }
+
             val peer = selected
             if (peer != null) {
                 val page = vm.api.privateMessages(account, peer)
                 ensureActive(); if (!current() || generation != requestGeneration) return@LaunchedEffect
-                messages = page.items; hasMore = page.hasMore; cursor = page.cursor
+                applyChatPage(page)
                 vm.updatePrivateUnread(account, vm.api.cachedPrivateUnread(account))
-                if (uncertain) error = PrivateSendUnknown().message
             } else {
                 val page = vm.api.privateConversations(account)
                 ensureActive(); if (!current() || generation != requestGeneration) return@LaunchedEffect
@@ -278,7 +294,7 @@ import java.util.UUID
             LazyColumn(Modifier.weight(1f)) {
                 if (conversations.isEmpty() && !loading && error == null) item { EmptyMessage("暂无私信，点击“发消息”开始会话") }
                 items(conversations, key = { it.id }) { item ->
-                    Row(Modifier.fillMaxWidth().clickable(enabled = !markingRead) { selected = item; messages = emptyList(); draft = ""; uncertain = false; error = null }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clickable(enabled = !markingRead) { selected = item; messages = emptyList(); draft = ""; error = null }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box {
                             IOSAvatar(item.name, item.portrait, diameter = 44.dp)
                             if (item.unread > 0) {
@@ -296,13 +312,78 @@ import java.util.UUID
                 if (hasMore) item { TextButton(onClick = { loadMore() }, enabled = !loading) { Text("加载更多会话") } }
             }
         } else {
-            val list = rememberLazyListState()
-            LaunchedEffect(messages.lastOrNull()?.id) { if (messages.isNotEmpty() && !loading) list.animateScrollToItem(messages.lastIndex + if (hasMore) 1 else 0) }
-            LazyColumn(Modifier.weight(1f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            val list = androidx.compose.runtime.key(peer.id) { rememberLazyListState() }
+            val storageKey = "private-reading-position.${account.uid}.${peer.userId}"
+            val previous = remember(storageKey) {
+                runCatching {
+                    val json = org.json.JSONObject(vm.store.prefs.getString(storageKey, null) ?: return@runCatching null)
+                    PrivateReadingPosition(json.getString("anchor"), json.optInt("offset"), json.getString("latest"), json.getBoolean("atBottom"))
+                }.getOrNull()
+            }
+            var initialized by remember(storageKey) { mutableStateOf(false) }
+            var userNavigated by remember(storageKey) { mutableStateOf(false) }
+            val dragged by list.interactionSource.collectIsDraggedAsState()
+            LaunchedEffect(dragged) { if (dragged) userNavigated = true }
+            var displayedLast by remember(storageKey) { mutableStateOf<String?>(null) }
+            var showJump by remember(storageKey) { mutableStateOf(false) }
+            var promptHandled by remember(storageKey) { mutableStateOf(false) }
+            val currentMessages by rememberUpdatedState(messages)
+            val currentInitialized by rememberUpdatedState(initialized)
+            fun savePosition() {
+                val rows = currentMessages
+                if (!currentInitialized || rows.isEmpty()) return
+                val visible = list.layoutInfo.visibleItemsInfo
+                val first = visible.firstOrNull { info -> rows.any { it.id == info.key } } ?: return
+                val last = visible.firstOrNull { it.key == rows.last().id }
+                val atBottom = last != null && last.offset + last.size <= list.layoutInfo.viewportEndOffset + 2
+                val value = org.json.JSONObject().put("anchor", first.key.toString()).put("offset", (list.layoutInfo.viewportStartOffset - first.offset).coerceAtLeast(0))
+                    .put("latest", rows.last().id).put("atBottom", atBottom)
+                vm.store.prefs.edit().putString(storageKey, value.toString()).apply()
+            }
+            DisposableEffect(storageKey, voiceOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) savePosition() }
+                voiceOwner.lifecycle.addObserver(observer)
+                onDispose { savePosition(); voiceOwner.lifecycle.removeObserver(observer) }
+            }
+            val ids = messages.map { it.id }
+            val needsHistory = PrivateReadingPolicy.needsHistory(previous, ids, hasMore)
+            val boundary = PrivateReadingPolicy.boundary(previous, ids)
+            val jumpTarget = PrivateReadingPolicy.target(previous, ids)
+            LaunchedEffect(storageKey, messages.lastOrNull()?.id) {
+                if (messages.isEmpty()) return@LaunchedEffect
+                val last = messages.last()
+                if (!initialized) {
+                    list.scrollToItem(messages.lastIndex + if (hasMore) 1 else 0)
+                    initialized = true
+                } else if (last.id != displayedLast) {
+                    val old = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == displayedLast }
+                    if ((old != null && old.offset + old.size <= list.layoutInfo.viewportEndOffset + 2) || last.senderId == account.uid) {
+                        list.animateScrollToItem(messages.lastIndex + if (hasMore) 1 else 0)
+                    }
+                }
+                displayedLast = last.id
+            }
+            LaunchedEffect(initialized, needsHistory, loading, messages.firstOrNull()?.id) {
+                if (initialized && needsHistory && !loading) loadMore()
+            }
+            LaunchedEffect(initialized, loading, messages.firstOrNull()?.id) {
+                if (initialized && !loading && !userNavigated && messages.isNotEmpty()) list.scrollToItem(messages.lastIndex + if (hasMore) 1 else 0)
+            }
+            LaunchedEffect(initialized, needsHistory, jumpTarget) {
+                if (initialized && !needsHistory && jumpTarget != null && !promptHandled) {
+                    promptHandled = true; showJump = true
+                }
+            }
+            LaunchedEffect(storageKey, showJump) { if (showJump) { delay(5_000); showJump = false } }
+            Box(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize().graphicsLayer(alpha = if (initialized || messages.isEmpty()) 1f else 0f), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.Bottom)) {
                 if (hasMore) item { TextButton(onClick = { loadMore() }, enabled = !loading && !sending) { Text("加载更早消息") } }
                 if (messages.isEmpty() && !loading && error == null) item { EmptyMessage("暂无消息") }
                 items(messages, key = { it.id }) { item ->
                     val mine = item.senderId == account.uid
+                    if (boundary != null && messages[boundary].id == item.id) {
+                        Text("以下是新消息", Modifier.fillMaxWidth().padding(vertical = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (mine && item.read) Text("已读", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -342,6 +423,17 @@ import java.util.UUID
                     }
                 }
             }
+            if (showJump && jumpTarget != null) {
+                FilledTonalButton(onClick = {
+                    userNavigated = true
+                    val index = messages.indexOfFirst { it.id == jumpTarget }
+                    if (index >= 0) scope.launch { list.animateScrollToItem(index + if (hasMore) 1 else 0, if (previous?.atBottom == false) previous.offset else 0) }
+                    showJump = false
+                }, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp).testTag("private-reading-jump")) {
+                    Text(if (previous?.atBottom == true) "跳转到上次未读" else "回到上次阅读位置")
+                }
+            }
+            }
             // The screen already reserves the keyboard inset supplied by FrostedAppShell.
             Column(Modifier.fillMaxWidth().testTag("private-chat-composer").padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -349,7 +441,6 @@ import java.util.UUID
                         value = draft,
                         onValueChange = { if (it.length <= 5000) draft = it },
                         modifier = Modifier.weight(1f).testTag("private-message-input"),
-                        enabled = !sending,
                         maxLines = 5,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -366,28 +457,28 @@ import java.util.UUID
                             }
                         },
                     )
-                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(44.dp), enabled = !sending) { SmileyIcon(Modifier.size(22.dp)) }
-                    TextButton(contentPadding = PaddingValues(horizontal = 8.dp), enabled = !sending && !uncertain && !loading && draft.isNotBlank() && draft.length <= 5000, onClick = {
-                        if (!current() || sending || uncertain) return@TextButton
-                        sending = true; error = null
+                    IconButton(onClick = { showEmoticons = !showEmoticons }, modifier = Modifier.size(44.dp)) { SmileyIcon(Modifier.size(22.dp)) }
+                    TextButton(contentPadding = PaddingValues(horizontal = 8.dp), enabled = draft.isNotBlank() && draft.length <= 5000, onClick = {
+                        if (!current() || draft.isBlank()) return@TextButton
+                        sendsInFlight++; error = null
                         val text = draft
+                        draft = ""
                         val requestGeneration = generation
-                        action = scope.launch {
+                        scope.launch {
                             try {
                                 ensureActive(); if (!current() || generation != requestGeneration) return@launch
                                 val id = vm.api.sendPrivateMessage(account, peer, text, UUID.randomUUID().toString().replace("-", "").take(10).lowercase())
                                 ensureActive(); if (!current() || generation != requestGeneration) return@launch
                                 messages = messages + PrivateChatMessage(id, account.uid, text, System.currentTimeMillis() / 1000)
-                                draft = ""
                             } catch (e: CancellationException) { throw e }
-                            catch (e: Exception) { if (current() && generation == requestGeneration) { uncertain = e is PrivateSendUnknown; error = e.message } }
-                            finally { if (current() && generation == requestGeneration) sending = false }
+                            catch (e: Exception) { if (current() && generation == requestGeneration) { if (draft.isEmpty()) draft = text; error = e.message } }
+                            finally { if (current() && generation == requestGeneration) sendsInFlight = (sendsInFlight - 1).coerceAtLeast(0) }
                         }
-                    }) { Text(if (sending) "发送中" else "发送") }
+                    }) { Text("发送") }
                 }
                 if (showEmoticons) LazyRow(Modifier.fillMaxWidth().height(48.dp)) {
                     items(TiebaEmoticon.names.entries.toList()) { (id, label) ->
-                        IconButton(onClick = { draft += "#($label)" }, enabled = !sending) {
+                        IconButton(onClick = { draft += "#($label)" }) {
                             coil.compose.AsyncImage("file:///android_asset/tieba-emoticons/image_emoticon$id.png", "插入$label", Modifier.size(28.dp))
                         }
                     }

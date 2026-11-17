@@ -9,6 +9,8 @@ struct ImageViewer: View {
     let image: ImageContent
     let galleryImages: [ImageContent]
     let galleryIndex: Int
+    let singlePostImage: Bool
+    @State private var resolvedRatio: CGFloat?
 
     @State private var inlineLoadState: TiebaRemoteImageLoadState = .empty
     @State private var inlineRetryTrigger = 0
@@ -20,11 +22,13 @@ struct ImageViewer: View {
     init(
         image: ImageContent,
         galleryImages: [ImageContent]? = nil,
-        galleryIndex: Int = 0
+        galleryIndex: Int = 0,
+        singlePostImage: Bool = false
     ) {
         self.image = image
         self.galleryImages = galleryImages ?? [image]
         self.galleryIndex = galleryIndex
+        self.singlePostImage = singlePostImage
         let identity = Self.sourceIdentity(for: image)
         previewSourceIdentity = identity
         _previewSource = StateObject(
@@ -35,18 +39,16 @@ struct ImageViewer: View {
     var body: some View {
         Group {
             if previewURL != nil {
-                inlineImage
-                .minTouchTarget()
-                .onTapGesture {
-                    activateInlineImage()
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityIdentifier("thread-inline-image")
-                .accessibilityLabel(inlineAccessibilityLabel)
-                .accessibilityHint(inlineAccessibilityHint)
-                .accessibilityAction {
-                    activateInlineImage()
+                if readingPreferences.originalImageRatio && singlePostImage {
+                    let ratio = OriginalImageLayoutPolicy.ratio(resolvedRatio ?? CGFloat(image.aspectRatio))
+                    Color.clear.aspectRatio(max(1 / 0.7, ratio), contentMode: .fit)
+                        .overlay(alignment: .leading) {
+                            GeometryReader { proxy in
+                                interactiveInlineImage.frame(width: proxy.size.width * OriginalImageLayoutPolicy.widthFraction(ratio), height: proxy.size.height, alignment: .leading)
+                            }
+                        }
+                } else {
+                    interactiveInlineImage
                 }
             } else {
                 imagePlaceholder
@@ -54,6 +56,18 @@ struct ImageViewer: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var interactiveInlineImage: some View {
+        inlineImage
+            .minTouchTarget()
+            .onTapGesture { activateInlineImage() }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("thread-inline-image")
+            .accessibilityLabel(inlineAccessibilityLabel)
+            .accessibilityHint(inlineAccessibilityHint)
+            .accessibilityAction { activateInlineImage() }
     }
 
     private var previewURL: URL? {
@@ -64,7 +78,10 @@ struct ImageViewer: View {
     }
 
     private var inlineAspectRatio: CGFloat {
-        InlineImageLayoutPolicy.displayAspectRatio(for: image)
+        if readingPreferences.originalImageRatio && singlePostImage {
+            return OriginalImageLayoutPolicy.ratio(resolvedRatio ?? CGFloat(image.aspectRatio))
+        }
+        return InlineImageLayoutPolicy.displayAspectRatio(for: image)
     }
 
     private var isTallImage: Bool {
@@ -139,6 +156,10 @@ struct ImageViewer: View {
                             image: $0,
                             sourceIdentity: previewSourceIdentity
                         )
+                        if $0.size.width > 0, $0.size.height > 0 {
+                            let ratio = $0.size.width / $0.size.height
+                            if resolvedRatio != ratio { resolvedRatio = ratio }
+                        }
                     }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

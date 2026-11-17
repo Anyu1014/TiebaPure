@@ -106,6 +106,8 @@ internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null 
     autoCollapseTabs: Boolean = true,
     account: Account? = null,
     scrollKey: String = root,
+    onHomeTop: (() -> Unit)? = null,
+    onHomeMessages: (() -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val layer = rememberGraphicsLayer()
@@ -131,11 +133,17 @@ internal val LocalAnyuBackdrop = staticCompositionLocalOf<AnyuBackdrop?> { null 
         }
         AnyuFrostedSurface(layer, origin, Modifier.fillMaxWidth().testTag("top-frosted-bar"), RoundedCornerShape(0.dp), floating = false, tintOverride = MaterialTheme.colorScheme.background.copy(alpha = if (dark) 0.72f else 0.42f)) {
             Box(Modifier.fillMaxWidth().height(status + navigationHeight).padding(top = status, bottom = 4.dp)) {
+                if (onHomeTop != null) Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(0.62f).fillMaxHeight().testTag("home-toolbar-scroll-top").clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onHomeTop).semantics { contentDescription = "回到首页顶部" })
                 if (titleContent == null) Text(title, if (startAlignedTitle) Modifier.align(Alignment.CenterStart).padding(start = 52.dp, end = titleTrailingInset).testTag("forum-title") else Modifier.align(Alignment.Center).padding(horizontal = if (showBack) 96.dp else 64.dp).testTag("toolbar-title"), fontSize = if (startAlignedTitle) 14.sp else 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else Box(Modifier.align(Alignment.CenterStart).padding(start = 52.dp, end = 148.dp).testTag("toolbar-forum-pill")) { titleContent() }
                 if (showBack) Box(Modifier.align(Alignment.CenterStart).padding(start = 4.dp).size(48.dp).testTag("toolbar-back-glass"), contentAlignment = Alignment.Center) {
                     AnyuFrostedSurface(layer, origin, Modifier.size(36.dp).testTag("toolbar-back-background"), CircleShape, tintOverride = toolbarButtonTint) {}
                     IconButton(onClick = onBack, modifier = Modifier.fillMaxSize()) { Icon(TiebaIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
+                }
+                if (onHomeMessages != null) Box(Modifier.align(Alignment.CenterStart).padding(start = 4.dp).size(48.dp).testTag("home-unread-messages"), contentAlignment = Alignment.Center) {
+                    AnyuFrostedSurface(layer, origin, Modifier.size(36.dp), CircleShape, tintOverride = toolbarButtonTint) {}
+                    IconButton(onClick = onHomeMessages, modifier = Modifier.fillMaxSize()) { Icon(Icons.Default.Notifications, "未读消息", modifier = Modifier.size(18.dp)) }
+                    Box(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(8.dp).background(Color(0xffff3b30), CircleShape))
                 }
                 Row(Modifier.align(Alignment.CenterEnd).padding(end = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (showSearch) Box(Modifier.size(48.dp).testTag("toolbar-search-glass"), contentAlignment = Alignment.Center) {

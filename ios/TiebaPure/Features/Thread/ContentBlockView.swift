@@ -101,7 +101,7 @@ struct ContentBlocksView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     }
                 case let .media(mediaBlocks):
-                    MediaBlocksView(blocks: mediaBlocks)
+                    MediaBlocksView(blocks: mediaBlocks, singlePostImage: blocks.filter { if case .image = $0 { return true }; return false }.count == 1)
                 case let .voice(voice):
                     if ThreadContentDisplayPolicy.maximumNumberOfLines(for: lineLimit) == 0 {
                         VoicePlaybackControl(voice: voice)
@@ -1795,6 +1795,7 @@ private struct InlineContentGroup: Identifiable {
 
 private struct MediaBlocksView: View {
     let blocks: [ContentBlock]
+    let singlePostImage: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: TiebaPureTheme.Spacing.sm) {
@@ -1804,7 +1805,8 @@ private struct MediaBlocksView: View {
                     ImageViewer(
                         image: image,
                         galleryImages: imageContents,
-                        galleryIndex: imageIndex(for: offset)
+                        galleryIndex: imageIndex(for: offset),
+                        singlePostImage: singlePostImage
                     )
                 case let .video(video):
                     VideoPlayerView(video: video)

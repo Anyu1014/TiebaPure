@@ -50,5 +50,5 @@ internal object PrivateMessageContent {
 }
 internal data class PrivateMessagePage<T>(val items: List<T>, val hasMore: Boolean, val cursor: Long?)
 internal class PrivateMessageRejected(val code: Long, val detail: String = "") : Exception("贴吧私信请求未通过（$code）。" + detail.ifBlank { "请稍后重试。" })
-internal class PrivateSendUnknown : Exception("发送结果无法确认，请先刷新消息核对，避免重复发送。")
+internal class PrivateSendUnknown(detail: String = "") : Exception(if (detail.isBlank()) "未收到发送结果，可继续发送。" else "私信发送失败：$detail")
 

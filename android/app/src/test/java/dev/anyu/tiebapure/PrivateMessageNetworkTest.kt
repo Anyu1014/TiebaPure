@@ -51,8 +51,44 @@ class PrivateMessageNetworkTest {
         return api
     }
     private val account = Account("84","fixture","fixture-bduss","fixture-stoken","fixture-tbs")
+    @Test fun successiveSendsAcceptSuccessWithOmittedOptionalEchoFields() = runBlocking {
+        val api = TiebaApi("fixture"); var attempts = 0
+        api.officialPull = { _, _ -> throw java.io.IOException("fixture") }
+        api.officialSend = { _, _ -> attempts++; IM.CommitResponse.newBuilder().setError(IM.IMError.newBuilder().setCode(0)).setData(IM.CommitResult.newBuilder().setId(attempts.toLong())).build() }
+        val peer = PrivateConversation("42", "42")
+        assertEquals("1", api.sendPrivateMessage(account, peer, "第一条", "unused"))
+        assertEquals("2", api.sendPrivateMessage(account, peer, "第二条", "unused"))
+        assertEquals(listOf("第一条", "第二条"), api.cachedPrivateMessages(account, peer).items.map { it.text })
+        assertEquals("第二条", api.cachedPrivateConversations(account).items.first().preview)
+        api.officialSend = { _, _ -> IM.CommitResponse.newBuilder().setError(IM.IMError.newBuilder().setCode(0)).setData(IM.CommitResult.newBuilder().setId(3).setToUid(43)).build() }
+        assertTrue(runCatching { api.sendPrivateMessage(account, peer, "第三条", "unused") }.exceptionOrNull() is PrivateSendUnknown)
+    }
+    @Test fun successfulReceiptCanOmitTheErrorEnvelope() = runBlocking {
+        val api = TiebaApi("fixture"); var attempts = 0
+        api.officialPull = { _, _ -> throw java.io.IOException("unexpected pull") }
+        api.officialSend = { _, request -> attempts++; IM.CommitResponse.newBuilder()
+            .setData(IM.CommitResult.newBuilder().setId(123).setToUid(42).setRecordId(request.data.recordId)).build() }
+        assertEquals("123", api.sendPrivateMessage(account, PrivateConversation("42", "42"), "测试消息", "unused"))
+        assertEquals(1, attempts)
+    }
+
+    @Test fun ambiguousSendDoesNotPullAndAnotherTapSendsAgain() = runBlocking {
+        val api = TiebaApi("fixture"); val peer = PrivateConversation("42", "42")
+        var sends = 0; var pulls = 0
+        api.officialPull = { _, _ -> pulls++; throw java.io.IOException("unexpected pull") }
+        api.officialSend = { _, _ ->
+            sends++
+            if (sends == 1) throw java.io.IOException("missing receipt")
+            IM.CommitResponse.newBuilder().setError(IM.IMError.newBuilder().setCode(0)).setData(IM.CommitResult.newBuilder().setId(2)).build()
+        }
+        assertTrue(runCatching { api.sendPrivateMessage(account, peer, "相同内容", "unused") }.exceptionOrNull() is PrivateSendUnknown)
+        assertEquals("2", api.sendPrivateMessage(account, peer, "相同内容", "unused"))
+        assertEquals(2, sends); assertEquals(0, pulls)
+    }
+
     @Test fun officialSendUsesActualUidPlainTextTypeAndMatchingReceiptWithoutRetry() = runBlocking {
         val api = TiebaApi("fixture"); var attempts = 0
+        api.officialPull = { _, _ -> throw java.io.IOException("fixture") }
         api.officialSend = { _, request ->
             attempts++; assertEquals(42,request.data.toUid); assertEquals(1,request.data.msgType); assertTrue(request.data.hasToUserType()); assertEquals("测试",request.data.content)
             IM.CommitResponse.newBuilder().setError(IM.IMError.newBuilder().setCode(0)).setData(IM.CommitResult.newBuilder().setId(9007199254740993).setToUid(42).setRecordId(request.data.recordId)).build()

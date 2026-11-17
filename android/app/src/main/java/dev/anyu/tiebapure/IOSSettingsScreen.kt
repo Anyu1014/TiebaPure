@@ -113,7 +113,10 @@ import androidx.compose.ui.unit.*
         item { IOSGroup { Box(Modifier.padding(16.dp)) { IOSSegmentedControl(listOf(2 to "热门", 0 to "正序", 1 to "倒序"), vm.defaultReplySort, vm::selectDefaultReplySort, Modifier.fillMaxWidth()) } } }
         item { SettingsFooter("只影响新打开的帖子；恢复上次阅读位置时会使用正序定位。") }
         item { GroupHeader("媒体") }
-        item { IOSGroup { SettingsToggle("手动加载媒体", vm.manualMedia) { vm.setSettings(media = it) } } }
+        item { IOSGroup {
+            SettingsToggle("图片原比例显示", vm.originalImageRatio, vm::selectOriginalImageRatio)
+            SettingsToggle("手动加载媒体", vm.manualMedia) { vm.setSettings(media = it) }
+        } }
         item { GroupHeader("本机内容") }
         item { IOSGroup {
             IOSRow("本机草稿", Icons.Default.Edit) { vm.navigate(Route("drafts", title = "本机草稿")) }

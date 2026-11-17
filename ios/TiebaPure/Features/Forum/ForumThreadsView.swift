@@ -1098,6 +1098,7 @@ struct ForumThreadRow: View {
     var onOpenUser: ((UserSummary) -> Void)?
     var onBlockForum: ((ThreadSummary) -> Void)?
     var onOpenMedia: ((ReaderMediaItem, [ReaderMediaItem], CGRect?, UIImage?, ImagePreviewSourceAnchor?) -> Void)?
+    var onOpenHotComment: ((Post) -> Void)?
     var onOpenComments: (() -> Void)?
     var isLikeUpdating = false
     var onToggleLike: (() -> Void)?
@@ -1171,6 +1172,23 @@ struct ForumThreadRow: View {
                             }
                         }
                     )
+                }
+
+                if case .homeFeed = presentation, let comment = thread.hotComment {
+                    Button { onOpenHotComment?(comment) } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                AvatarView(url: comment.author.portraitURL, title: comment.author.displayNameResolved, size: 28)
+                                Text(comment.author.displayNameResolved).lineLimit(1)
+                                Spacer(minLength: 4)
+                                Image("HotCommentStamp").renderingMode(.original).resizable().scaledToFit().frame(width: 50, height: 34).accessibilityLabel("热评")
+                                Image(systemName: "hand.thumbsup")
+                                Text("\(comment.likeCount)")
+                            }.font(.subheadline)
+                            Text(comment.blocks.compactMap(\.plainText).joined()).font(.subheadline).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                        }.foregroundStyle(.primary).padding(10)
+                            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                    }.buttonStyle(.plain).accessibilityIdentifier("home-hot-comment-\(thread.id)")
                 }
 
                 InteractionStatsView(

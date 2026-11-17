@@ -116,6 +116,35 @@ final class FixtureDecodingTests: XCTestCase {
         XCTAssertEqual(mapped.blocks, [.text("推荐流正文")])
     }
 
+    func testOfficialSelectedHomeReplyWireField() throws {
+        let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("protocol-fixtures/home-hot-comment.json")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
+        let hex = try XCTUnwrap(json["response_hex"] as? String)
+        var bytes = Data(); var index = hex.startIndex
+        while index < hex.endIndex { let next = hex.index(index, offsetBy: 2); bytes.append(try XCTUnwrap(UInt8(hex[index..<next], radix: 16))); index = next }
+        let response = try Tieba_PersonalizedResponse(serializedBytes: bytes)
+        let threads = response.data.threadList.map { ThreadMapper.fromThreadInfo($0, usersByID: [:]) }
+        let reply = try XCTUnwrap(threads[0].hotComment)
+        XCTAssertEqual(reply.id, 77); XCTAssertEqual(reply.author.id, 84)
+        XCTAssertEqual(reply.author.displayNameResolved, "评论作者")
+        XCTAssertEqual(reply.contentPreview, "这是官方选出的热评"); XCTAssertEqual(reply.likeCount, 460)
+        XCTAssertNil(threads[1].hotComment); XCTAssertNil(threads[2].hotComment)
+    }
+
+    func testOfficialFeedPostExposeMapsToItsOwnThread() throws {
+        let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("protocol-fixtures/home-postexpose.json")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
+        let hex = try XCTUnwrap(json["response_hex"] as? String)
+        var bytes = Data(); var index = hex.startIndex
+        while index < hex.endIndex { let next = hex.index(index, offsetBy: 2); bytes.append(try XCTUnwrap(UInt8(hex[index..<next], radix: 16))); index = next }
+        let response = try Tieba_PersonalizedResponse(serializedBytes: bytes)
+        let threads = ThreadMapper.homeThreads(from: response.data)
+        let reply = try XCTUnwrap(threads[0].hotComment)
+        XCTAssertEqual(reply.id, 77); XCTAssertEqual(reply.author.displayNameResolved, "热评作者")
+        XCTAssertEqual(reply.contentPreview, "官方组件真实格式评论"); XCTAssertEqual(reply.likeCount, 460)
+        XCTAssertNil(threads[1].hotComment)
+    }
+
     func testRequestSchemasPreserveFieldNumbersWireTypesAndPresence() throws {
         var common = Tieba_CommonRequest()
         common.bduss = "BDUSS"

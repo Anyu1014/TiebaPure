@@ -1,5 +1,15 @@
 # 当前进展
 
+## 2026-11-17 私信进入即贴底 + 发送失败原因透出（双端源码）
+
+- Android `PrivateMessagesScreen.kt`：`LaunchedEffect(storageKey, messages.lastOrNull()?.id)` 不再等 `loading` 结束，消息一到就用 `scrollToItem` 瞬时定位最后一条；`LazyColumn` 加 `graphicsLayer(alpha = if (initialized || messages.isEmpty()) 1f else 0f)`，在定位完成前不绘制，因此进入会话不再先显示顶部再滑到底部。
+- iOS `PrivateMessagesView.swift`：`updateChatScroll` 首次定位改为同步 `withTransaction(disablesAnimations: true) { proxy.scrollTo("private-chat-bottom", anchor: .bottom) }` 并立即置 `chatInitialized`，不再依赖 `!loading`；新增 `BottomAnchoredScroll`（iOS 17+ 用 `.defaultScrollAnchor(.bottom)`）；列表在未定位前 `.opacity(0)`。
+- iOS 发送不再被会话身份漂移挡住：`PrivateMessagesView.swift` 的 `send(_:)` 原来先比较 `environment.accountStore.load()?.sessionIdentity == account.sessionIdentity`（该值含 bduss/stoken），一旦百度刷新过票据就抛 `CancellationError`、消息静默发不出去；现在改为读取存储账号并按 `uid` 校验，且用最新的 `stored` 账号发请求。同文件的 `.task` 载入与 `accountDidChange` 也从 `sessionIdentity` 比较改成 `uid` 比较，避免换票据后被判定为“切号”。
+- 连发失败真因（2026-11-17 实测）：官方 205001 提交在“同一会话连续发送”时只回 `{ error: { code: 0, message: "成功" } }`（原始字节 `0a0a08001206e68890e58a9f`），不带 `data`（id/to_uid/record_id 全为 0）；旧代码要求 `receipt.id > 0`，于是把成功判成“回执校验未通过（id=0）”。现在双端改为：信封 `hasError && code == 0` 即视为已提交，缺少回执时用本地 `record` 补齐 id/toUid/recordId 再写缓存；只有“既无 error 信封又无 id”、或 to_uid/record 对不上时才判失败。Android 实测连发 `diag-7`…`diag-10` 四条全部入列、无报错（`.cache/screenshots/consecutive-send.png`），`diag-1`/`diag-2` 那两次确实没有出现在 pull 历史里。
+- 发送失败可诊断：Android `PrivateSendUnknown(detail)` 透出底层异常文本，回执不符时提示“回执校验未通过（id=…）”；`PrivateMessageRejected` 附带服务端 message。iOS 新增 `PrivateMessageError.transport(String)`，`send` 的兜底 catch 改为抛出真实 `localizedDescription`，拒绝时附带 `response.error.message`。
+- 验证：`testDebugUnitTest` 通过（早前 3 条失败是 `android.util.Log` 在 JVM 单测未 mock 导致，已移除该调用）；`assembleRelease` BUILD SUCCESSFUL 并安装到 emulator-5580（versionName 2.5 / 92）；iOS `generic/platform=iOS Simulator` BUILD SUCCEEDED。
+- 实测（emulator-5580，账号 Anyu1014 / UID 7123831732）：进入「消息 → 私信 → Anyu.test」可见历史消息，用 `adb shell input text` 输入并发送后气泡正常出现、无报错，说明 Android 侧发送链路可用；进入会话 0.4s 截图 `.cache/screenshots/enter-chat-0.4s.png` 已停在最底部。iOS 因本机无模拟器 runtime、未在真机验证，静默失败的主因（sessionIdentity 漂移）已修，待真机确认。
+
 ## 2026-11-16 iOS 私信媒体消息贴边对齐（本地源码）
 
 - `PrivateMessagesView.swift`：新增 `@State mediaAspects: [String: CGFloat]` 与 `mediaSize(_:)`，图片用 `TiebaRemoteImage` 的 `onImageResolved` 回调取到真实宽高比后按 `220×280` 上限计算实际尺寸，取代原来固定 `frame(width: 220, height: 220)` 造成的左右留黑；行内 `edgeGap` 对文本仍为 48、对图片与语音为 0，因此对方图片贴左、我方图片贴右，只保留列表 16pt 外边距。

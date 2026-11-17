@@ -198,8 +198,53 @@ final class PrivateMessageNetworkTests: XCTestCase {
         let page = try await second.conversations(account: account)
         XCTAssertEqual(page.items.first?.preview,"保留跨入口的消息")
     }
+    func testSuccessiveSendsWithOptionalEchoFieldsOmittedUseCache() async throws {
+        let client = PrivateMessageClient(directory: nil)
+        let peer = PrivateConversation(userID: "42", passUK: "42", userType: 0, name: "测试用户")
+        var attempts: Int64 = 0
+        client.officialSend = { _, _ in
+            attempts += 1
+            var response = Tiebapure_Official_CommitResponse(); response.error.code = 0; response.data.id = attempts
+            return response
+        }
+        _ = try await client.send("第一条", to: peer, account: account, key: "unused")
+        _ = try await client.send("第二条", to: peer, account: account, key: "unused")
+        XCTAssertEqual(try client.cachedMessages(peer, account: account).items.map(\.text), ["第一条", "第二条"])
+        XCTAssertEqual(try client.cachedConversations(account: account).items.first?.preview, "第二条")
+    }
+    func testSuccessfulReceiptCanOmitTheErrorEnvelope() async throws {
+        let client = PrivateMessageClient(directory: nil)
+        let peer = PrivateConversation(userID: "42", passUK: "42", userType: 0, name: "测试用户")
+        var attempts = 0
+        client.officialPull = { _, _ in XCTFail("must not pull"); throw URLError(.notConnectedToInternet) }
+        client.officialSend = { _, request in
+            attempts += 1
+            var response = Tiebapure_Official_CommitResponse()
+            response.data.id = 123; response.data.toUid = 42; response.data.recordID = request.data.recordID
+            return response
+        }
+        let id = try await client.send("测试消息", to: peer, account: account, key: "unused")
+        XCTAssertEqual(id, "123"); XCTAssertEqual(attempts, 1)
+    }
+    func testAmbiguousSendDoesNotPullAndAnotherTapSendsAgain() async throws {
+        let client = PrivateMessageClient(directory: nil)
+        let peer = PrivateConversation(userID: "42", passUK: "42", userType: 0, name: "测试用户")
+        var sends = 0; var pulls = 0
+        client.officialPull = { _, _ in pulls += 1; throw URLError(.notConnectedToInternet) }
+        client.officialSend = { _, _ in
+            sends += 1
+            if sends == 1 { throw URLError(.networkConnectionLost) }
+            var response = Tiebapure_Official_CommitResponse(); response.error.code = 0; response.data.id = 2
+            return response
+        }
+        do { _ = try await client.send("相同内容", to: peer, account: account, key: "unused"); XCTFail("must report unknown") }
+        catch { guard case PrivateMessageError.unknownSend = error else { return XCTFail("wrong outcome") } }
+        let result = try await client.send("相同内容", to: peer, account: account, key: "unused")
+        XCTAssertEqual(result, "2"); XCTAssertEqual(sends, 2); XCTAssertEqual(pulls, 0)
+    }
     func testOfficialSendReceiptAndNoRetry() async throws {
         let client = PrivateMessageClient(directory: nil)
+        client.officialPull = { _, _ in throw URLError(.notConnectedToInternet) }
         let peer = PrivateConversation(userID: "42", passUK: "42", userType: 0, name: "测试用户")
         var attempts = 0
         client.officialSend = { _, request in

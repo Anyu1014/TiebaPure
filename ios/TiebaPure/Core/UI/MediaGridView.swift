@@ -43,6 +43,8 @@ struct ReaderMediaItem: Identifiable, Equatable, Sendable {
 }
 
 struct MediaGridView: View {
+    @Environment(\.readingPreferences) private var readingPreferences
+    @State private var resolvedRatio: CGFloat?
     let items: [ReaderMediaItem]
     let maxItemHeight: CGFloat?
     let totalItemCount: Int
@@ -74,7 +76,16 @@ struct MediaGridView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            if usesCompactFeedLayout {
+            if readingPreferences.originalImageRatio, totalItemCount == 1, let item = items.first, item.kind == .image {
+                let ratio = OriginalImageLayoutPolicy.ratio(resolvedRatio ?? CGFloat(item.image?.aspectRatio ?? 1))
+                Color.clear.aspectRatio(max(1 / 0.7, ratio), contentMode: .fit)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { proxy in
+                            mediaButton(item)
+                                .frame(width: proxy.size.width * OriginalImageLayoutPolicy.widthFraction(ratio), height: proxy.size.height, alignment: .leading)
+                        }
+                    }
+            } else if usesCompactFeedLayout {
                 Color.clear
                     .frame(maxWidth: .infinity)
                     .aspectRatio(
@@ -130,10 +141,15 @@ struct MediaGridView: View {
                     item: item,
                     maxHeight: usesCompactFeedLayout ? nil : maxItemHeight,
                     aspectRatioOverride: usesCompactFeedLayout ? nil : thumbnailAspectRatio,
-                    fillsAvailableSpace: usesCompactFeedLayout,
+                    fillsAvailableSpace: usesCompactFeedLayout || (readingPreferences.originalImageRatio && totalItemCount == 1 && item.kind == .image),
                     totalItemCount: totalItemCount,
                     destinationAccessibilityLabel: destinationAccessibilityLabel,
                     destinationAccessibilityHint: destinationAccessibilityHint,
+                    onImageResolved: { image in
+                        guard image.size.width > 0, image.size.height > 0 else { return }
+                        let ratio = image.size.width / image.size.height
+                        if resolvedRatio != ratio { resolvedRatio = ratio }
+                    },
                     onTap: onTap
                 )
             } else {
@@ -141,12 +157,17 @@ struct MediaGridView: View {
                     item: item,
                     maxHeight: usesCompactFeedLayout ? nil : maxItemHeight,
                     aspectRatioOverride: usesCompactFeedLayout ? nil : thumbnailAspectRatio,
-                    fillsAvailableSpace: usesCompactFeedLayout,
+                    fillsAvailableSpace: usesCompactFeedLayout || (readingPreferences.originalImageRatio && totalItemCount == 1 && item.kind == .image),
                     retryTrigger: 0,
                     isManualLoadAuthorized: false,
                     explicitOriginalAuthorization: nil,
                     showsManualLoadIndicator: false,
-                    onLoadStateChange: { _ in }
+                    onLoadStateChange: { _ in },
+                    onImageResolved: { image in
+                        guard image.size.width > 0, image.size.height > 0 else { return }
+                        let ratio = image.size.width / image.size.height
+                        if resolvedRatio != ratio { resolvedRatio = ratio }
+                    }
                 )
                 .accessibilityHidden(true)
             }
@@ -186,6 +207,7 @@ private struct MediaItemButton: View {
     let totalItemCount: Int
     let destinationAccessibilityLabel: String?
     let destinationAccessibilityHint: String?
+    let onImageResolved: (UIImage) -> Void
     let onTap: (ReaderMediaItem, CGRect?, UIImage?, ImagePreviewSourceAnchor?) -> Void
 
     @State private var loadState: TiebaRemoteImageLoadState = .empty
@@ -202,6 +224,7 @@ private struct MediaItemButton: View {
         totalItemCount: Int,
         destinationAccessibilityLabel: String?,
         destinationAccessibilityHint: String?,
+        onImageResolved: @escaping (UIImage) -> Void,
         onTap: @escaping (ReaderMediaItem, CGRect?, UIImage?, ImagePreviewSourceAnchor?) -> Void
     ) {
         self.item = item
@@ -211,6 +234,7 @@ private struct MediaItemButton: View {
         self.totalItemCount = totalItemCount
         self.destinationAccessibilityLabel = destinationAccessibilityLabel
         self.destinationAccessibilityHint = destinationAccessibilityHint
+        self.onImageResolved = onImageResolved
         self.onTap = onTap
         _previewSource = StateObject(
             wrappedValue: ImagePreviewSourceAnchor(
@@ -241,6 +265,7 @@ private struct MediaItemButton: View {
                         image: $0,
                         sourceIdentity: item.previewSourceIdentity
                     )
+                    onImageResolved($0)
                 }
             )
         }
@@ -534,4 +559,13 @@ enum ForumFeedMediaLayoutPolicy {
     static func showsMoreBadge(totalCount: Int, visibleCount: Int) -> Bool {
         totalCount > visibleCount
     }
+}
+
+// Shared sizing rule for single post images, in feed and reader.
+enum OriginalImageLayoutPolicy {
+    static func ratio(_ value: CGFloat) -> CGFloat {
+        guard value.isFinite, value > 0 else { return 1 }
+        return min(max(value, 10.0 / 21.0), 21.0 / 10.0)
+    }
+    static func widthFraction(_ value: CGFloat) -> CGFloat { min(1, 0.7 * ratio(value)) }
 }

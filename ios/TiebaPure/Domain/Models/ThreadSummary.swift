@@ -18,6 +18,7 @@ struct ThreadSummary: Identifiable, Equatable, Codable, Sendable {
     var isTop: Bool
     var isGood: Bool
     var hasVideo: Bool
+    var hotComment: Post?
 
     init(
         id: Int64,
@@ -36,7 +37,8 @@ struct ThreadSummary: Identifiable, Equatable, Codable, Sendable {
         blocks: [ContentBlock],
         isTop: Bool = false,
         isGood: Bool = false,
-        hasVideo: Bool = false
+        hasVideo: Bool = false,
+        hotComment: Post? = nil
     ) {
         self.id = id
         self.forumID = forumID
@@ -55,6 +57,7 @@ struct ThreadSummary: Identifiable, Equatable, Codable, Sendable {
         self.isTop = isTop
         self.isGood = isGood
         self.hasVideo = hasVideo
+        self.hotComment = hotComment
     }
 
     var textPreview: String {

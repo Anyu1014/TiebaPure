@@ -193,6 +193,7 @@ struct ReadingPreferences: Equatable, Sendable {
     var lineSpacing: ReaderLineSpacing
     var defaultReplySort: ThreadReplySort
     var mediaLoading: ReaderMediaLoadingPolicy
+    var originalImageRatio: Bool = true
 
     static let `default` = ReadingPreferences(
         fontSize: .standard,
@@ -337,6 +338,7 @@ final class ReadingPreferencesStore: ObservableObject {
         var lineSpacing: String
         var defaultReplySort: String
         var mediaLoading: String
+        var originalImageRatio: String = "dev.infinityf4p.tiebapure.reader.original-image-ratio"
 
         static let live = StorageKeys(
             fontSize: "dev.infinityf4p.tiebapure.reader.font-size",
@@ -386,7 +388,8 @@ final class ReadingPreferencesStore: ObservableObject {
             fontFamily: fontFamily,
             lineSpacing: lineSpacing,
             defaultReplySort: defaultReplySort,
-            mediaLoading: mediaLoading
+            mediaLoading: mediaLoading,
+            originalImageRatio: (defaults.object(forKey: keys.originalImageRatio) as? Bool) ?? ReadingPreferences.default.originalImageRatio
         )
     }
 
@@ -396,6 +399,7 @@ final class ReadingPreferencesStore: ObservableObject {
         persist(preferences.lineSpacing, defaultValue: ReadingPreferences.default.lineSpacing, key: keys.lineSpacing)
         persist(preferences.defaultReplySort, defaultValue: ReadingPreferences.default.defaultReplySort, key: keys.defaultReplySort)
         persist(preferences.mediaLoading, defaultValue: ReadingPreferences.default.mediaLoading, key: keys.mediaLoading)
+        defaults.set(preferences.originalImageRatio, forKey: keys.originalImageRatio)
         self.preferences = preferences
     }
 
@@ -462,6 +466,7 @@ final class ReadingPreferencesStore: ObservableObject {
         defaults.removeObject(forKey: keys.lineSpacing)
         defaults.removeObject(forKey: keys.defaultReplySort)
         defaults.removeObject(forKey: keys.mediaLoading)
+        defaults.removeObject(forKey: keys.originalImageRatio)
         preferences = .default
     }
 
